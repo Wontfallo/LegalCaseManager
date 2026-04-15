@@ -1,0 +1,23 @@
+{
+  "ollama": {
+    "provider_type": "ollama",
+    "enabled": false,
+    "api_key": "",
+    "base_url": "http://127.0.0.1:11434/v1",
+    "chat_model": "llama3",
+    "embedding_model": "nomic-embed-text",
+    "extra": {}
+  },
+  "github_copilot": {
+    "provider_type": "github_copilot",
+    "enabled": true,
+    "api_key": "ghu_6HWAkDCG2bqW1yXUEW0QKVzfOzTEw84O3ThN",
+    "base_url": "https://api.githubcopilot.com",
+    "chat_model": "gpt-4o",
+    "embedding_model": "text-embedding-3-large",
+    "extra": {
+      "copilot_token": "tid=a07a1c2d1504dc2859185cf47a2f55a9;exp=1776214838;sku=plus_yearly_subscriber_quota;proxy-ep=proxy.individual.githubcopilot.com;st=dotcom;chat=1;cit=1;malfil=1;editor_preview_features=1;agent_mode=1;agent_mode_auto_approval=1;mcp=1;client_byok=0;ccr=1;8kp=1;ip=82.118.30.37;asn=AS206092:ae843bdb34006a871652f30cbceadb7fed6c4e96ae6055176982c4c2dd7d025d",
+      "copilot_expires_at": 1776214838
+    }
+  }
+}

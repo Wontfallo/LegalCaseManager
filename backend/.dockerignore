@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Storage (mounted as volume, not baked into image)
+storage/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Env files (injected at runtime)
+.env
+.env.*
+!.env.example
+
+# Tests
+tests/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Docs
+*.md
+LICENSE

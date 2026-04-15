@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build output
+.next/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Env files (injected at runtime / build args)
+.env
+.env.*
+!.env.local.example
+
+# Docs
+*.md
+LICENSE

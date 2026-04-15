@@ -1,0 +1,244 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #ffffff;
+    --foreground: #0f172a;
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+    --border: #e2e8f0;
+    --ring: #3b82f6;
+    color-scheme: light;
+  }
+
+  .dark {
+    --background: #020617;
+    --foreground: #e2e8f0;
+    --muted: #0f172a;
+    --muted-foreground: #94a3b8;
+    --border: #1e293b;
+    --ring: #60a5fa;
+    color-scheme: dark;
+  }
+
+  html {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    @apply antialiased transition-colors duration-200;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  * {
+    border-color: var(--border);
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5
+           text-sm font-semibold text-white shadow-sm transition-all
+           hover:bg-brand-700 focus-visible:outline focus-visible:outline-2
+           focus-visible:outline-offset-2 focus-visible:outline-brand-600
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg bg-white px-4 py-2.5
+           text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset
+           ring-slate-300 transition-all hover:bg-slate-50
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .dark .btn-secondary {
+    @apply bg-slate-900 text-slate-100 ring-slate-700 hover:bg-slate-800;
+  }
+
+  .input-field {
+    @apply block w-full rounded-lg border-0 py-2.5 px-3.5 text-slate-900
+           shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400
+           focus:ring-2 focus:ring-inset focus:ring-brand-600 sm:text-sm;
+  }
+
+  .dark .input-field {
+    @apply bg-slate-950 text-slate-100 ring-slate-700 placeholder:text-slate-500;
+  }
+
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-sm;
+  }
+
+  .dark .card {
+    @apply border-slate-800 bg-slate-950 text-slate-100;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .badge-green {
+    @apply badge bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20;
+  }
+
+  .badge-blue {
+    @apply badge bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20;
+  }
+
+  .badge-amber {
+    @apply badge bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20;
+  }
+
+  .badge-red {
+    @apply badge bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/20;
+  }
+
+  .dark .badge-green {
+    @apply bg-emerald-950/40 text-emerald-400 ring-emerald-500/30;
+  }
+
+  .dark .badge-blue {
+    @apply bg-blue-950/40 text-blue-400 ring-blue-500/30;
+  }
+
+  .dark .badge-amber {
+    @apply bg-amber-950/40 text-amber-400 ring-amber-500/30;
+  }
+
+  .dark .badge-red {
+    @apply bg-red-950/40 text-red-400 ring-red-500/30;
+  }
+
+  /* ── Universal dark-mode semantic helpers ──────────── */
+  /* Use these for repeating patterns across components  */
+
+  .text-heading {
+    @apply text-slate-900;
+  }
+  .dark .text-heading {
+    @apply text-slate-100;
+  }
+
+  .text-body {
+    @apply text-slate-700;
+  }
+  .dark .text-body {
+    @apply text-slate-300;
+  }
+
+  .text-muted {
+    @apply text-slate-500;
+  }
+  .dark .text-muted {
+    @apply text-slate-400;
+  }
+
+  .text-faint {
+    @apply text-slate-400;
+  }
+  .dark .text-faint {
+    @apply text-slate-500;
+  }
+
+  .surface {
+    @apply bg-white border-slate-200;
+  }
+  .dark .surface {
+    @apply bg-slate-950 border-slate-800;
+  }
+
+  .surface-muted {
+    @apply bg-slate-50 border-slate-200;
+  }
+  .dark .surface-muted {
+    @apply bg-slate-900 border-slate-800;
+  }
+
+  .surface-inset {
+    @apply bg-slate-100;
+  }
+  .dark .surface-inset {
+    @apply bg-slate-900;
+  }
+
+  .label-text {
+    @apply text-sm font-medium text-slate-700;
+  }
+  .dark .label-text {
+    @apply text-slate-300;
+  }
+}
+
+/* Timeline node styling */
+.timeline-node {
+  @apply cursor-pointer transition-all duration-200;
+}
+
+.timeline-node:hover {
+  @apply scale-110;
+  filter: brightness(1.1);
+}
+
+.timeline-node.selected {
+  @apply ring-2 ring-brand-500 ring-offset-2;
+}
+
+.dark .timeline-node.selected {
+  @apply ring-offset-slate-950;
+}
+
+/* Split-screen panel transitions */
+.evidence-panel-enter {
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Minimap slider styling */
+input[type="range"].minimap-slider {
+  @apply w-full h-2 appearance-none rounded-full bg-slate-200 outline-none;
+}
+
+.dark input[type="range"].minimap-slider {
+  @apply bg-slate-700;
+}
+
+input[type="range"].minimap-slider::-webkit-slider-thumb {
+  @apply appearance-none w-5 h-5 rounded-full bg-brand-600 cursor-pointer
+         shadow-md hover:bg-brand-700 transition-colors;
+}
+
+/* Scrollbar styling */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-slate-100 rounded;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-slate-900;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded hover:bg-slate-400;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-slate-700 hover:bg-slate-600;
+}
