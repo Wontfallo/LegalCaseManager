@@ -39,6 +39,10 @@ from app.services.ocr_service import process_document_ocr
 from app.services.vectorization_service import delete_vectors_by_source
 from sqlalchemy import delete, select
 
+from app.services.document_organization import (
+    infer_section_label,
+    organize_documents_with_ai,
+)
 logger = get_logger("documents_router")
 router = APIRouter(prefix="/api", tags=["Documents"])
 
@@ -107,70 +111,7 @@ def _filename_similarity_ratio(left: str | None, right: str | None) -> float:
 
 
 def _default_section_label(doc: Document) -> str:
-    name = (doc.original_filename or "").lower()
-    text = (doc.summary or doc.raw_ocr_text or "").lower()
-    haystack = f"{name} {text}"
-    if any(
-        word in haystack
-        for word in [
-            "by-law",
-            "bylaws",
-            "declaration",
-            "amendment",
-            "rules",
-            "articles",
-        ]
-    ):
-        return "Governing Documents"
-    if any(
-        word in haystack
-        for word in ["board meeting", "minutes", "agenda", "annual meeting", "special meeting"]
-    ):
-        return "Board Meetings Agenda & Minutes"
-    if any(
-        word in haystack
-        for word in ["contract", "agreement", "retainer", "scope of work", "engagement"]
-    ):
-        return "Contracts"
-    if any(
-        word in haystack
-        for word in ["law firm", "lawfirm", "attorney", "counsel", "legal opinion", "esquire", "esq"]
-    ):
-        return "Letters from Lawfirm"
-    if any(
-        word in haystack
-        for word in ["report", "engineering", "inspection", "balcony", "bid", "estimate", "proposal"]
-    ):
-        return "Reports and Bids"
-    if any(
-        word in haystack for word in ["email", "gmail", "e-mail"]
-    ):
-        if any(
-            word in haystack
-            for word in ["lefky", "barbera lefky", "lefky law"]
-        ):
-            return "Emails (Lefky Law Firm)"
-        return "Emails"
-    if any(
-        word in haystack
-        for word in ["usps", "certified mail", "receipt", "tracking", "postage", "return receipt"]
-    ):
-        return "Receipts USPS"
-    if any(
-        word in haystack for word in ["letter", "response", "request", "notice", "correspondence"]
-    ):
-        return "Correspondence"
-    if any(
-        word in haystack
-        for word in ["invoice", "financial", "ledger", "statement", "charges", "budget"]
-    ):
-        return "Financials"
-    if any(
-        word in haystack
-        for word in ["photo", "image", "jpg", "jpeg", "png", "damage", "repaired"]
-    ):
-        return "Photos and Evidence"
-    return "General"
+    return infer_section_label(doc.original_filename, doc.summary, doc.raw_ocr_text)
 
 
 async def _delete_document_record(db: DBSession, doc: Document) -> None:
@@ -435,106 +376,7 @@ async def ai_organize_documents(
 
     if not documents:
         return AIDocumentOrganizationResponse(case_id=case_id, documents=[])
-
-    if get_active_chat_provider() is None:
-        applied: list[DocumentSectionSuggestion] = []
-        for index, doc in enumerate(documents):
-            section = _default_section_label(doc)
-            doc.section_label = section
-            doc.sort_order = index
-            applied.append(
-                DocumentSectionSuggestion(
-                    document_id=doc.id,
-                    section_label=section,
-                    sort_order=index,
-                    reason="Fallback rules-based organization",
-                )
-            )
-        await db.flush()
-        return AIDocumentOrganizationResponse(case_id=case_id, documents=applied)
-
-    payload = [
-        {
-            "document_id": str(doc.id),
-            "filename": doc.original_filename,
-            "summary": doc.summary,
-            "excerpt": (doc.raw_ocr_text or "")[:1200],
-        }
-        for doc in documents
-    ]
-
-    system_prompt = (
-        "You organize legal case documents into practical sections for a human reviewing a case. "
-        "Return JSON only as an array of objects with keys: document_id, section_label, sort_order, reason. "
-        "Use these section names: Governing Documents, Board Meetings Agenda & Minutes, Contracts, "
-        "Letters from Lawfirm, Reports and Bids, Emails (Lefky Law Firm), Emails, Receipts USPS, "
-        "Correspondence, Financials, Photos and Evidence, General. "
-        "Emails from or regarding attorney Barbera Lefky or Lefky Law Firm must go in 'Emails (Lefky Law Firm)', not the general Emails section. "
-        "sort_order should be a zero-based integer for order within the full case list."
-    )
-    user_prompt = f"Organize these documents into useful review sections and order them for quick human scanning:\n{json.dumps(payload)}"
-
-    try:
-        response = await chat_completion(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            temperature=0.1,
-            max_tokens=1800,
-        )
-        suggestions_raw = json.loads(response)
-    except Exception as exc:
-        logger.warning(
-            "ai_document_organize_failed", case_id=str(case_id), error=str(exc)
-        )
-        suggestions_raw = [
-            {
-                "document_id": str(doc.id),
-                "section_label": _default_section_label(doc),
-                "sort_order": index,
-                "reason": "Fallback rules-based organization",
-            }
-            for index, doc in enumerate(documents)
-        ]
-
-    by_id = {str(doc.id): doc for doc in documents}
-    applied: list[DocumentSectionSuggestion] = []
-    for index, item in enumerate(suggestions_raw):
-        doc = by_id.get(str(item.get("document_id")))
-        if doc is None:
-            continue
-        section = (
-            str(item.get("section_label") or _default_section_label(doc)).strip()
-            or "General"
-        )
-        sort_order = item.get("sort_order")
-        if not isinstance(sort_order, int) or sort_order < 0:
-            sort_order = index
-        reason = item.get("reason")
-        doc.section_label = section
-        doc.sort_order = sort_order
-        applied.append(
-            DocumentSectionSuggestion(
-                document_id=doc.id,
-                section_label=section,
-                sort_order=sort_order,
-                reason=str(reason) if reason else None,
-            )
-        )
-
-    for index, doc in enumerate(documents):
-        if not any(item.document_id == doc.id for item in applied):
-            section = _default_section_label(doc)
-            doc.section_label = section
-            doc.sort_order = index
-            applied.append(
-                DocumentSectionSuggestion(
-                    document_id=doc.id,
-                    section_label=section,
-                    sort_order=index,
-                    reason="Filled missing AI result with fallback organization",
-                )
-            )
-
+    applied = await organize_documents_with_ai(case_id=case_id, documents=documents)
     await db.flush()
     applied.sort(key=lambda item: (item.section_label.lower(), item.sort_order))
     return AIDocumentOrganizationResponse(case_id=case_id, documents=applied)

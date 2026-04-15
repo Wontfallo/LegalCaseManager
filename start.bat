@@ -94,16 +94,22 @@ if %errorlevel% neq 0 (
 echo        All prerequisites found.
 echo.
 
-:: Port conflicts
+:: Free stale dev ports from previous runs
+echo        Checking for stale processes on app ports...
 for %%P in (%BACKEND_PORT% %FRONTEND_PORT%) do (
-    netstat -ano | findstr /r /c:":%%P .*LISTENING" >nul 2>&1
-    if !errorlevel! equ 0 (
-        echo  ERROR: Port %%P is already in use.
-        echo         Close the existing process using port %%P, then run start.bat again.
-        echo         Helpful command: netstat -ano ^| findstr :%%P
-        echo.
-        exit /b 1
-    )
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-NetTCPConnection -LocalPort %%P -State Listen -ErrorAction SilentlyContinue ^| Select-Object -ExpandProperty OwningProcess -Unique ^| ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+)
+
+timeout /t 2 /nobreak >nul
+
+call :resolve_available_port BACKEND_PORT %BACKEND_PORT%
+call :resolve_available_port FRONTEND_PORT %FRONTEND_PORT%
+
+if not "%BACKEND_PORT%"=="8090" (
+    echo        Backend port 8090 still busy. Using %BACKEND_PORT% instead.
+)
+if not "%FRONTEND_PORT%"=="3001" (
+    echo        Frontend port 3001 still busy. Using %FRONTEND_PORT% instead.
 )
 
 :: ────────────────────────────────────────────────────────────
@@ -137,7 +143,7 @@ echo [3/6] Installing Python dependencies...
 set "STAMP=%VENV%\.deps_installed"
 if exist "%STAMP%" (
     echo        Dependencies already installed. Skipping.
-    echo        (Delete %STAMP% to force reinstall)
+    echo        Delete %STAMP% to force reinstall.
 ) else (
     echo        Installing Python packages. This may take a few minutes...
     echo        Full log: %PIP_LOG%
@@ -226,7 +232,7 @@ echo [5/6] Installing frontend dependencies...
 
 if exist "%FRONTEND%\node_modules" (
     echo        node_modules already exists. Skipping.
-    echo        (Delete frontend\node_modules to force reinstall)
+    echo        Delete frontend\node_modules to force reinstall.
 ) else (
     cd /d "%FRONTEND%"
     echo        Installing frontend packages. This may take a few minutes...
@@ -301,4 +307,18 @@ echo    %PIP_LOG%
 echo    %NPM_LOG%
 echo  This launcher window can be closed safely after both app windows are up.
 echo.
+exit /b 0
+
+:resolve_available_port
+setlocal enabledelayedexpansion
+set "PORT_VALUE=%~2"
+
+:resolve_port_loop
+netstat -ano | findstr /r /c:":!PORT_VALUE! .*LISTENING" >nul 2>&1
+if !errorlevel! equ 0 (
+    set /a PORT_VALUE+=1
+    goto :resolve_port_loop
+)
+
+endlocal & set "%~1=%PORT_VALUE%"
 exit /b 0

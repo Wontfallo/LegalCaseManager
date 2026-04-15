@@ -172,9 +172,9 @@ export default function TimelineTab({ caseId }: Props) {
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-[#0A0C10]">
       {/* Timeline Controls Bar */}
-      <div className="flex-shrink-0 border-b border-slate-200 bg-white px-8 py-4 dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex-shrink-0 border-b border-white/5 bg-[#0D0F14]/40 px-12 py-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
             {/* Minimap Slider */}
@@ -268,20 +268,19 @@ export default function TimelineTab({ caseId }: Props) {
               {/* Vertical timeline */}
               <div className="relative">
                 {/* Vertical line */}
-                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-slate-200 dark:bg-slate-700" />
+                <div className="absolute left-4 top-0 bottom-0 w-[1px] bg-gradient-to-b from-[#8251EE]/50 via-[#8251EE]/20 to-transparent" />
 
                 {Array.from(groupedEvents.entries()).map(
                   ([bucketKey, bucketEvents]) => (
-                    <div key={bucketKey} className="mb-8">
+                    <div key={bucketKey} className="mb-12">
                       {/* Bucket Header */}
-                      <div className="relative flex items-center mb-4">
-                        <div className="absolute left-2 w-5 h-5 rounded-full bg-brand-100 border-2 border-brand-500 z-10 dark:bg-brand-950/40" />
-                        <h4 className="ml-12 text-sm font-bold text-heading">
+                      <div className="relative flex items-center mb-6">
+                        <div className="absolute left-[13px] w-2 h-2 rounded-full bg-[#8251EE] shadow-[0_0_10px_rgba(130,81,238,0.8)] z-10" />
+                        <h4 className="ml-12 text-[11px] font-bold uppercase tracking-[0.2em] text-[#8251EE]">
                           {formatBucketLabel(bucketKey)}
                         </h4>
-                        <span className="ml-2 text-xs text-faint">
-                          ({bucketEvents.length} event
-                          {bucketEvents.length !== 1 ? "s" : ""})
+                        <span className="ml-4 text-[11px] font-bold text-white/30 tracking-widest">
+                          {bucketEvents.length} EVENT{bucketEvents.length !== 1 ? "S" : ""}
                         </span>
                       </div>
 
@@ -291,11 +290,11 @@ export default function TimelineTab({ caseId }: Props) {
                           key={event.id}
                           onClick={() => handleEventClick(event.id)}
                           className={cn(
-                            "timeline-node relative flex w-full text-left mb-3 ml-12 mr-4",
-                            "rounded-lg border p-4 transition-all duration-200",
+                            "timeline-node relative flex w-full text-left mb-4 ml-12 mr-6",
+                            "rounded-2xl border p-6 transition-all duration-300 backdrop-blur-md",
                             selectedEventId === event.id
-                              ? "border-brand-500 bg-brand-50 shadow-md selected dark:bg-brand-950/30"
-                              : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-600"
+                              ? "border-[#8251EE] bg-[#8251EE]/10 shadow-[0_10px_30px_rgba(130,81,238,0.2)]"
+                              : "border-white/5 bg-[#12141A]/60 hover:border-[#8251EE]/40 hover:bg-[#12141A]/80 shadow-[0_8px_20px_rgba(0,0,0,0.3)]"
                           )}
                         >
                           {/* Connector dot */}
@@ -310,41 +309,41 @@ export default function TimelineTab({ caseId }: Props) {
                             )}
                           />
 
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex-1">
-                                <p className="text-sm text-heading leading-snug">
-                                  {event.event_description}
-                                </p>
-                                <div className="mt-2 flex items-center gap-3 text-xs">
-                                  <span className="text-muted">
-                                    {formatDateTime(
-                                      event.absolute_timestamp
-                                    )}
-                                  </span>
-                                  <span
-                                    className={cn(
-                                      "font-medium",
-                                      getConfidenceColor(
-                                        event.ai_confidence_score
-                                      )
-                                    )}
-                                  >
-                                    {(
-                                      event.ai_confidence_score * 100
-                                    ).toFixed(0)}
-                                    % confidence
-                                  </span>
-                                  {event.source_type && (
-                                    <span className="flex items-center gap-1">
-                                      {getSourceTypeIcon(event.source_type)}
-                                      <span className="text-faint capitalize">
-                                        {event.source_type}
-                                      </span>
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
+                           <div className="flex-1 min-w-0">
+                             <div className="flex items-start justify-between gap-4">
+                               <div className="flex-1">
+                                 <p className="text-base font-bold text-white leading-relaxed group-hover:text-[#8251EE] transition-colors">
+                                   {event.event_description}
+                                 </p>
+                                 <div className="mt-4 flex flex-wrap items-center gap-5">
+                                   <span className="text-xs font-bold text-[#A1A1AA] uppercase tracking-widest font-mono">
+                                     {formatDateTime(
+                                       event.absolute_timestamp
+                                     )}
+                                   </span>
+                                   <span
+                                     className={cn(
+                                       "text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border",
+                                       getConfidenceColor(
+                                         event.ai_confidence_score
+                                       ).includes("emerald") ? "text-[#10B981] border-[#10B981]/20 bg-[#10B981]/5" :
+                                       getConfidenceColor(event.ai_confidence_score).includes("amber") ? "text-[#F59E0B] border-[#F59E0B]/20 bg-[#F59E0B]/5" :
+                                       "text-[#EF4444] border-[#EF4444]/20 bg-[#EF4444]/5"
+                                     )}
+                                   >
+                                     {(
+                                       event.ai_confidence_score * 100
+                                     ).toFixed(0)}
+                                     % AI SCORE
+                                   </span>
+                                   {event.source_type && (
+                                     <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                                       {getSourceTypeIcon(event.source_type)}
+                                       {event.source_type}
+                                     </span>
+                                   )}
+                                 </div>
+                               </div>
 
                               {/* Click indicator */}
                               <svg

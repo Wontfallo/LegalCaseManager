@@ -3,7 +3,7 @@
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { useCaseCommunications, useCreateCommunication } from "@/hooks/useApi";
-import { formatDateTime, getCommTypeLabel, truncate } from "@/lib/utils";
+import { formatDateTime, getCommTypeLabel, truncate, cn } from "@/lib/utils";
 import type { CommType, CommunicationCreate } from "@/types";
 
 interface Props {
@@ -117,23 +117,24 @@ export default function CommunicationsTab({ caseId }: Props) {
   };
 
   return (
-    <div className="h-full flex">
+    <div className="h-full flex bg-[#0A0C10]">
       {/* Communications List */}
       <div
         className={`${
           selectedComm ? "w-1/2" : "w-full"
-        } border-r border-slate-200 dark:border-slate-800 overflow-auto transition-all duration-300`}
+        } border-r border-white/5 bg-[#0D0F14]/40 overflow-auto transition-all duration-300 relative`}
       >
-        <div className="px-8 py-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-heading">
-              Communication Logs ({communications?.length || 0})
+        <div className="px-12 py-10">
+          <div className="flex items-center justify-between mb-8 pb-6 border-b border-white/5">
+            <h3 className="text-2xl font-bold tracking-tight text-white flex items-center gap-3">
+              Communications
+              <span className="text-sm bg-[#8251EE]/20 text-[#8251EE] border border-[#8251EE]/30 px-3 py-1 rounded-full">{communications?.length || 0}</span>
             </h3>
             <button
               onClick={() => setShowCreate(true)}
-              className="btn-primary"
+              className="px-6 py-2.5 bg-[#8251EE] text-white font-bold rounded-xl hover:bg-[#9366F5] shadow-[0_0_20px_rgba(130,81,238,0.3)] transition-all active:scale-95"
             >
-              + Add Note
+              + Log Activity
             </button>
           </div>
 
@@ -225,7 +226,7 @@ export default function CommunicationsTab({ caseId }: Props) {
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {communications.map((comm) => (
                 <button
                   key={comm.id}
@@ -234,38 +235,51 @@ export default function CommunicationsTab({ caseId }: Props) {
                       selectedCommId === comm.id ? null : comm.id
                     )
                   }
-                  className={`w-full text-left card hover:shadow-md transition-shadow ${
+                  className={cn(
+                    "group relative w-full text-left backdrop-blur-md bg-[#12141A]/60 p-6 rounded-2xl border transition-all duration-300 shadow-[0_8px_20px_rgba(0,0,0,0.3)]",
                     selectedCommId === comm.id
-                      ? "ring-2 ring-brand-500"
-                      : ""
-                  }`}
+                      ? "border-[#8251EE] bg-[#8251EE]/10 ring-1 ring-[#8251EE]/40"
+                      : "border-white/5 hover:border-[#8251EE]/40 hover:bg-[#12141A]/80 hover:shadow-[0_10px_30px_rgba(130,81,238,0.1)]"
+                  )}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5">{getCommIcon(comm.comm_type)}</div>
+                  <div className="flex items-start gap-5">
+                    <div className="mt-1 p-2 rounded-xl bg-white/5 group-hover:bg-[#8251EE]/20 transition-colors">
+                        {getCommIcon(comm.comm_type)}
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-muted uppercase">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-[10px] font-bold text-[#A1A1AA] uppercase tracking-[0.2em] font-mono">
                           {getCommTypeLabel(comm.comm_type)}
                         </span>
                         {comm.is_vectorized && (
-                          <span className="badge-green text-[10px]">
+                          <span className="bg-[#10B981]/20 text-[#10B981] px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border border-[#10B981]/30">
                             Indexed
                           </span>
                         )}
                       </div>
-                      {comm.subject && (
-                        <p className="text-sm font-medium text-heading mt-0.5">
+                      {comm.subject ? (
+                        <p className="text-base font-bold text-white group-hover:text-[#8251EE] transition-colors">
                           {comm.subject}
                         </p>
+                      ) : (
+                        <p className="text-base font-bold text-white/40 italic">No subject</p>
                       )}
                       {comm.transcript_body && (
-                        <p className="text-xs text-muted mt-1 line-clamp-2">
+                        <p className="mt-2.5 text-sm text-[#A1A1AA] line-clamp-2 leading-relaxed">
                           {truncate(comm.transcript_body, 200)}
                         </p>
                       )}
-                      <div className="mt-1.5 flex items-center gap-3 text-xs text-faint">
-                        {comm.sender && <span>From: {comm.sender}</span>}
-                        <span>{formatDateTime(comm.timestamp)}</span>
+                      <div className="mt-4 flex flex-wrap items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-white/30 font-mono">
+                        {comm.sender && (
+                            <span className="flex items-center gap-1.5">
+                                <span className="h-1 w-1 rounded-full bg-white/20" />
+                                From: <span className="text-white/60">{comm.sender}</span>
+                            </span>
+                        )}
+                        <span className="flex items-center gap-1.5">
+                            <span className="h-1 w-1 rounded-full bg-white/20" />
+                            {formatDateTime(comm.timestamp)}
+                        </span>
                       </div>
                     </div>
                   </div>

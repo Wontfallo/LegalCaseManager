@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   useAIOrganizeDocuments,
   useCleanupDuplicateDocuments,
@@ -21,16 +22,43 @@ import { apiClient } from "@/lib/api";
 import { formatDateTime } from "@/lib/utils";
 import type { DocStatus, DocumentResponse, DuplicateGroup } from "@/types";
 
+const fadeIn = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit: { opacity: 0 },
+  transition: { duration: 0.2 },
+};
+
+const slideUp = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: 20 },
+  transition: { duration: 0.3, ease: 'easeOut' as const },
+};
+
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.05, delayChildren: 0.05 },
+  },
+};
+
+const staggerItem = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' as const } },
+};
+
 interface Props {
   caseId: string;
 }
 
 function StatusBadge({ status }: { status: DocStatus }) {
   const styles: Record<DocStatus, string> = {
-    pending: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-    processing: "bg-amber-100 text-amber-700 animate-pulse dark:bg-amber-900/40 dark:text-amber-400",
-    completed: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
-    failed: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+    pending: "bg-white/10 text-white border border-white/20",
+    processing: "bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/30 animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.2)]",
+    completed: "bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]",
+    failed: "bg-[#EF4444]/10 text-[#EF4444] border border-[#EF4444]/20 shadow-[0_0_10px_rgba(239,68,68,0.1)]",
   };
   const labels: Record<DocStatus, string> = {
     pending: "Pending",
@@ -40,7 +68,7 @@ function StatusBadge({ status }: { status: DocStatus }) {
   };
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${styles[status]}`}
+      className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-sm ${styles[status]}`}
     >
       {labels[status]}
     </span>
@@ -309,19 +337,19 @@ export default function DocumentsTab({ caseId }: Props) {
   };
 
   const renderDocumentPreview = (doc: DocumentResponse, title: string) => (
-    <div className="rounded-lg border surface p-4">
-      <div className="mb-4">
-        <div className="flex items-start justify-between gap-3">
+    <motion.div initial="initial" animate="animate" exit="exit" variants={fadeIn} className="rounded-xl border border-white/10 bg-[#12141A]/60 backdrop-blur-md p-6 shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+      <div className="mb-6">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-body">{doc.original_filename}</p>
+            <div className="flex items-center gap-3">
+              <p className="text-xl font-bold text-[#9366F5] tracking-wide">{doc.original_filename}</p>
               <StatusBadge status={doc.status} />
             </div>
-            <p className="text-xs text-muted mt-1">
-              {title} | Type: {doc.file_type}
+            <p className="text-sm text-[#A1A1AA] mt-1.5 font-medium">
+              {title} <span className="mx-2">|</span> Type: <span className="text-white uppercase">{doc.file_type}</span>
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
               onClick={async () => {
                 try {
@@ -341,7 +369,7 @@ export default function DocumentsTab({ caseId }: Props) {
                   );
                 }
               }}
-              className="text-xs text-brand-600 hover:text-brand-800"
+              className="text-sm font-semibold text-[#8251EE] hover:text-[#9366F5] transition-colors"
             >
               Open Original
             </button>
@@ -365,7 +393,7 @@ export default function DocumentsTab({ caseId }: Props) {
                   );
                 }
               }}
-              className="text-xs text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              className="text-sm font-semibold text-white hover:text-[#A1A1AA] transition-colors"
             >
               Download Original
             </button>
@@ -374,52 +402,52 @@ export default function DocumentsTab({ caseId }: Props) {
       </div>
 
       {doc.status === "failed" && (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-4 dark:bg-red-950/30 dark:border-red-900">
-          <p className="text-sm font-medium text-red-800 dark:text-red-300">Processing Failed</p>
-          <p className="mt-1 text-sm text-red-700 dark:text-red-400">
+        <div className="rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/20 p-4 shadow-inner mb-4">
+          <p className="text-sm font-medium text-[#EF4444]">Processing Failed</p>
+          <p className="mt-1 text-sm text-[#EF4444]/80">
             {doc.status_message || "An unknown error occurred during processing."}
           </p>
         </div>
       )}
 
       {(doc.status === "pending" || doc.status === "processing") && (
-        <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-center dark:bg-amber-950/30 dark:border-amber-800">
-          <div className="animate-spin h-6 w-6 rounded-full border-4 border-amber-500 border-t-transparent mx-auto mb-2" />
-          <p className="text-sm text-amber-700 dark:text-amber-400">
+        <div className="rounded-lg bg-[#F59E0B]/10 border border-[#F59E0B]/20 p-6 flex flex-col items-center justify-center text-center shadow-inner mb-4">
+          <div className="animate-spin h-8 w-8 rounded-full border-4 border-[#F59E0B] border-t-transparent mx-auto mb-3 shadow-[0_0_15px_rgba(245,158,11,0.5)]" />
+          <p className="text-sm font-medium text-[#F59E0B]">
             {doc.status_message || "OCR processing in progress..."}
           </p>
         </div>
       )}
 
       {doc.status === "completed" && (
-        <>
+        <div className="space-y-6">
           {doc.summary && (
-            <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 mb-3 dark:bg-blue-950/30 dark:border-blue-900">
-              <h4 className="text-xs font-semibold text-blue-800 dark:text-blue-300 uppercase tracking-wide mb-2">
+            <div className="rounded-xl bg-[#8251EE]/5 border border-[#8251EE]/20 p-5 shadow-inner">
+              <h4 className="text-sm font-bold text-[#8251EE] uppercase tracking-wider mb-3 flex items-center gap-2">
                 AI Summary
               </h4>
-              <p className="text-sm text-blue-900 dark:text-blue-200 leading-relaxed">{doc.summary}</p>
+              <p className="text-base text-[#E7E9ED] leading-[1.8] line-clamp-none">{doc.summary}</p>
             </div>
           )}
           {doc.raw_ocr_text ? (
             <div>
-              <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">
+              <h4 className="text-sm font-bold text-[#A1A1AA] uppercase tracking-wider mb-3">
                 Extracted Text
               </h4>
-              <div className="rounded-lg surface-muted p-4 max-h-[50vh] overflow-auto custom-scrollbar">
-                <pre className="text-xs text-body whitespace-pre-wrap font-mono leading-relaxed">
+              <div className="rounded-xl bg-[#0A0C10]/80 border border-white/5 p-5 max-h-[50vh] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent shadow-inner">
+                <pre className="text-sm text-[#D4D4D8] whitespace-pre-wrap font-mono leading-relaxed">
                   {doc.raw_ocr_text}
                 </pre>
               </div>
             </div>
           ) : (
-            <div className="rounded-lg surface-muted p-4 text-center">
-              <p className="text-sm text-muted">No text was extracted from this document.</p>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
+              <p className="text-sm text-[#A1A1AA]">No text was extracted from this document.</p>
             </div>
           )}
-        </>
+        </div>
       )}
-    </div>
+    </motion.div>
   );
 
   const saveDocumentPlacement = async (
@@ -533,43 +561,44 @@ export default function DocumentsTab({ caseId }: Props) {
   };
 
   return (
-    <div className="h-full flex">
+    <div className="h-full flex text-[#E7E9ED] bg-[hsl(240,6%,10%)] selection:bg-[#8251EE]/30 selection:text-white font-sans">
       {/* Documents List */}
       <div
         className={`${
           selectedDoc ? "w-1/2" : "w-full"
-        } border-r border-slate-200 dark:border-slate-800 overflow-auto transition-all duration-300`}
+        } border-r border-[#1E2128] bg-[hsl(240,5%,12%)]/40 overflow-auto transition-all duration-300 relative`}
       >
-        <div className="px-8 py-6">
-          <div className="flex items-center justify-between mb-6">
+        <div className="px-8 py-8 max-w-7xl mx-auto">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between mb-8 pb-6 border-b border-white/5">
             <div>
-              <h3 className="text-lg font-semibold text-heading">
-                Documents ({documents?.length || 0})
+              <h3 className="text-2xl font-bold tracking-tight text-white flex items-center gap-3">
+                Documents
+                <span className="text-sm bg-[#8251EE]/20 text-[#8251EE] border border-[#8251EE]/30 px-3 py-1 rounded-full">{documents?.length || 0}</span>
               </h3>
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1.5 text-base text-[#A1A1AA]">
                 Upload PDFs or images. Use AI Organize to auto-categorize.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 value={newSectionName}
                 onChange={(e) => setNewSectionName(e.target.value)}
                 placeholder="New section"
-                className="rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 px-3 py-2 text-sm"
+                className="rounded-lg bg-black/40 border border-white/10 text-white placeholder-white/30 px-3 py-2 text-sm focus:outline-none focus:border-[#8251EE]/50 focus:ring-1 focus:ring-[#8251EE]/50 transition-all w-40"
               />
               <button
                 onClick={() => void handleCreateSection()}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-body hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 transition-colors"
               >
                 Add Section
               </button>
               <select
                 value={bulkTargetSection}
                 onChange={(e) => setBulkTargetSection(e.target.value)}
-                className="rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 px-3 py-2 text-sm"
+                className="rounded-lg bg-black/40 border border-white/10 text-white px-3 py-2 text-sm focus:outline-none focus:border-[#8251EE]/50 transition-all w-40"
               >
                 {allSectionNames.map((name) => (
-                  <option key={name} value={name}>
+                  <option key={name} value={name} className="bg-[#1E2128]">
                     {name}
                   </option>
                 ))}
@@ -577,7 +606,7 @@ export default function DocumentsTab({ caseId }: Props) {
               <button
                 onClick={() => void handleBulkMove()}
                 disabled={selectedDocumentIds.length === 0}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-body hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 disabled:opacity-50 transition-colors"
               >
                 Move Selected
               </button>
@@ -588,7 +617,7 @@ export default function DocumentsTab({ caseId }: Props) {
                   });
                   setShowDuplicates(true);
                 }}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-body hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 transition-colors"
               >
                 {showDuplicates ? "Refresh Duplicates" : "Scan Duplicates"}
               </button>
@@ -606,7 +635,7 @@ export default function DocumentsTab({ caseId }: Props) {
                   }
                 }}
                 disabled={aiOrganizeMutation.isPending}
-                className="mr-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-body hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                className="rounded-lg bg-[#8251EE]/10 border border-[#8251EE]/30 px-3 py-2 text-sm font-medium text-[#8251EE] hover:bg-[#8251EE]/20 disabled:opacity-50 transition-colors"
               >
                 {aiOrganizeMutation.isPending ? "AI Organizing..." : "AI Organize"}
               </button>
@@ -620,7 +649,7 @@ export default function DocumentsTab({ caseId }: Props) {
                   }
                 }}
                 disabled={resummarizeAllMutation.isPending}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-body hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 disabled:opacity-50 transition-colors"
               >
                 {resummarizeAllMutation.isPending ? "Summarizing..." : "Re-summarize All"}
               </button>
@@ -635,7 +664,7 @@ export default function DocumentsTab({ caseId }: Props) {
                   }
                 }}
                 disabled={reOCRAllMutation.isPending}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-body hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 disabled:opacity-50 transition-colors"
               >
                 {reOCRAllMutation.isPending ? "Re-scanning..." : "Re-scan All (OCR)"}
               </button>
@@ -649,7 +678,7 @@ export default function DocumentsTab({ caseId }: Props) {
                   }
                 }}
                 disabled={scanImagesMutation.isPending}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-body hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 disabled:opacity-50 transition-colors"
               >
                 {scanImagesMutation.isPending ? "Scanning..." : "Scan Images (Vision)"}
               </button>
@@ -892,25 +921,28 @@ export default function DocumentsTab({ caseId }: Props) {
                     </div>
                   </div>
 
-                  {!collapsedSections[sectionName] && sectionDocs.map((doc, index) => (
-                    <div
+                  {!collapsedSections[sectionName] && (
+                    <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="space-y-4">
+                      {sectionDocs.map((doc, index) => (
+                    <motion.div
                       key={doc.id}
+                      variants={staggerItem}
                       draggable
-                      onDragStart={(e) => {
+                      onDragStart={(e: any) => {
                         e.dataTransfer.setData("text/plain", doc.id);
                         setDraggingDocId(doc.id);
                       }}
                       onDragEnd={() => setDraggingDocId(null)}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => {
+                      onDragOver={(e: any) => e.preventDefault()}
+                      onDrop={(e: any) => {
                         e.preventDefault();
                         const droppedDocId = e.dataTransfer.getData("text/plain");
                         if (droppedDocId) {
                           void handleDropDocument(droppedDocId, sectionName, index);
                         }
                       }}
-                      className={`card hover:shadow-md transition-shadow ${
-                        selectedDocId === doc.id ? "ring-2 ring-brand-500" : ""
+                      className={`relative group flex flex-col backdrop-blur-md bg-[#12141A]/40 border rounded-xl overflow-hidden shadow-[0_8px_20px_rgba(0,0,0,0.5)] transition-all duration-300 p-5 ${
+                        selectedDocId === doc.id ? "border-[#8251EE] bg-[#8251EE]/5 ring-1 ring-[#8251EE]/40" : "border-white/10 hover:border-[#8251EE]/50 hover:shadow-[0_10px_30px_rgba(130,81,238,0.15)]"
                       } ${draggingDocId === doc.id ? "opacity-60" : ""}`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -927,27 +959,27 @@ export default function DocumentsTab({ caseId }: Props) {
                           }
                           className="flex-1 min-w-0 text-left"
                         >
-                          <p className="text-base font-semibold text-heading leading-snug">
+                          <p className="text-lg font-bold text-[#9366F5] tracking-wide leading-snug group-hover:text-white transition-colors flex items-center gap-2">
                             {doc.original_filename || doc.storage_uri}
                           </p>
                           {doc.summary && (
-                            <p className="mt-2 text-sm text-body line-clamp-3 leading-relaxed">
+                            <p className="mt-3 text-[15px] text-[#D4D4D8] line-clamp-3 leading-relaxed">
                               {doc.summary}
                             </p>
                           )}
-                          <div className="mt-1 flex items-center gap-3 text-xs text-muted">
-                            <span className="uppercase font-medium">{doc.file_type}</span>
+                          <div className="mt-4 flex items-center gap-3 text-sm font-medium text-slate-400">
+                            <span className="text-slate-300 uppercase tracking-wider">{doc.file_type}</span>
                             {doc.page_count && <span>{doc.page_count} page(s)</span>}
                             {doc.is_vectorized && (
-                              <span className="badge-green">Indexed</span>
+                              <span className="bg-[#10B981]/20 text-[#10B981] px-2 py-1 rounded text-xs border border-[#10B981]/30">Indexed</span>
                             )}
                           </div>
                           {doc.status === "failed" && doc.status_message && (
-                            <p className="mt-1 text-xs text-red-600">
+                            <p className="mt-2 text-sm text-[#EF4444]">
                               {doc.status_message}
                             </p>
                           )}
-                          <p className="mt-1 text-xs text-faint">
+                          <p className="mt-3 text-xs text-[#A1A1AA] font-medium tracking-wide">
                             Uploaded {formatDateTime(doc.created_at)}
                           </p>
                         </button>
@@ -963,7 +995,7 @@ export default function DocumentsTab({ caseId }: Props) {
                                   doc.sort_order
                                 )
                               }
-                              className="rounded border border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 px-2 py-1 text-xs"
+                              className="rounded bg-black/40 border border-white/10 text-white px-2 py-1.5 text-[11px] uppercase tracking-wide focus:outline-none focus:border-[#8251EE]/50 font-medium w-full"
                             >
                               {Array.from(new Set(["Ungrouped", ...sectionEntries.map(([name]) => name)])).map((name) => (
                                 <option key={name} value={name}>
@@ -976,7 +1008,7 @@ export default function DocumentsTab({ caseId }: Props) {
                                 onClick={() =>
                                   void saveDocumentPlacement(doc, doc.section_label, Math.max(0, doc.sort_order - 1))
                                 }
-                              className="text-xs text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                              className="text-xs uppercase tracking-widest font-bold text-white hover:text-[#8251EE] transition-colors"
                               >
                                 Up
                               </button>
@@ -986,7 +1018,7 @@ export default function DocumentsTab({ caseId }: Props) {
                                 onClick={() =>
                                   void saveDocumentPlacement(doc, doc.section_label, doc.sort_order + 1)
                                 }
-                              className="text-xs text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                              className="text-xs uppercase tracking-widest font-bold text-white hover:text-[#8251EE] transition-colors"
                               >
                                 Down
                               </button>
@@ -997,7 +1029,7 @@ export default function DocumentsTab({ caseId }: Props) {
                               <button
                                 onClick={() => handleRetryDocument(doc.id)}
                                 disabled={retryMutation.isPending}
-                                className="text-xs text-brand-600 hover:text-brand-800"
+                                className="text-xs uppercase tracking-widest font-bold text-[#8251EE] hover:text-[#9366F5] transition-colors"
                               >
                                 Retry
                               </button>
@@ -1013,7 +1045,7 @@ export default function DocumentsTab({ caseId }: Props) {
                                   }
                                 }}
                                 disabled={resummarizeDocMutation.isPending}
-                                className="text-xs text-brand-600 hover:text-brand-800"
+                                className="text-xs uppercase tracking-widest font-bold text-white hover:text-[#8251EE] transition-colors"
                               >
                                 Re-summarize
                               </button>
@@ -1026,15 +1058,17 @@ export default function DocumentsTab({ caseId }: Props) {
                                 )
                               }
                               disabled={deleteMutation.isPending}
-                              className="text-xs text-red-600 hover:text-red-800"
+                              className="text-xs uppercase tracking-widest font-bold text-[#EF4444] hover:text-[#F87171] transition-colors"
                             >
                               Delete
                             </button>
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
+                    </motion.div>
+                  )}
                 </div>
               ))}
             </div>

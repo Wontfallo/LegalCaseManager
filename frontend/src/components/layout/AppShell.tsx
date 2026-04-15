@@ -3,6 +3,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/authStore";
+import { cn } from "@/lib/utils";
 
 interface AppShellProps {
   children: ReactNode;
@@ -38,13 +39,13 @@ export default function AppShell({ children }: AppShellProps) {
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="flex h-screen bg-[#0A0C10] text-[#E7E9ED] selection:bg-[#8251EE]/30">
       {/* Sidebar */}
-      <aside className="w-64 flex-shrink-0 border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <aside className="w-64 flex-shrink-0 border-r border-white/5 bg-[#0D0F14] relative z-20">
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="flex h-16 items-center gap-3 border-b border-slate-200 px-5 dark:border-slate-800">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600">
+          <div className="flex h-16 items-center gap-3 border-b border-white/5 px-6">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#8251EE] to-[#A855F7] shadow-[0_0_15px_rgba(130,81,238,0.4)]">
               <svg
                 className="h-5 w-5 text-white"
                 fill="none"
@@ -59,7 +60,7 @@ export default function AppShell({ children }: AppShellProps) {
                 />
               </svg>
             </div>
-            <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
               LegalCM
             </span>
           </div>
@@ -68,7 +69,7 @@ export default function AppShell({ children }: AppShellProps) {
           <nav className="flex-1 space-y-1 px-3 py-4">
             <Link
               href="/cases"
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+              className="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-[#A1A1AA] transition-all duration-200 hover:bg-[#8251EE]/10 hover:text-white"
             >
               <svg
                 className="h-5 w-5 text-slate-400 dark:text-slate-500"
@@ -87,7 +88,7 @@ export default function AppShell({ children }: AppShellProps) {
             </Link>
             <Link
               href="/settings"
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+              className="group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-[#A1A1AA] transition-all duration-200 hover:bg-[#8251EE]/10 hover:text-white"
             >
               <svg
                 className="h-5 w-5 text-slate-400 dark:text-slate-500"
@@ -111,23 +112,28 @@ export default function AppShell({ children }: AppShellProps) {
             </Link>
           </nav>
 
-          <div className="border-t border-slate-200 p-3 dark:border-slate-800">
+          <div className="border-t border-white/5 p-4">
             <button
               onClick={toggleTheme}
-              className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+              className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-xs font-bold uppercase tracking-widest text-[#A1A1AA] hover:bg-[#8251EE]/5 hover:text-[#8251EE] transition-all duration-200"
             >
-              <span>{theme === "dark" ? "Dark Mode On" : "Dark Mode Off"}</span>
-              <span className="text-xs text-slate-400 dark:text-slate-500">
-                Toggle
-              </span>
+              <span>{theme === "dark" ? "Dark Mode" : "Light Mode"}</span>
+              <div className={cn("h-4 w-8 rounded-full p-1 transition-colors", theme === "dark" ? "bg-[#8251EE]" : "bg-white/10")}>
+                <div className={cn("h-full w-2 rounded-full bg-white transition-transform", theme === "dark" ? "translate-x-4" : "translate-x-0")} />
+              </div>
             </button>
           </div>
         </div>
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-950">
-        {children}
+      <main className="flex-1 overflow-auto bg-[#0A0C10] relative">
+        {/* Ambient Glows */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#8251EE]/5 blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-[#3B82F6]/5 blur-[100px] pointer-events-none" />
+        <div className="relative z-10 h-full">
+          {children}
+        </div>
       </main>
     </div>
   );

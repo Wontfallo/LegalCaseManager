@@ -14,6 +14,8 @@ import type {
   DocumentUploadResponse,
   DocumentOrganizationResponse,
   AIDocumentOrganizationResponse,
+  AssistantChatRequest,
+  AssistantChatResponse,
   DuplicateScanResponse,
   DuplicateCleanupResponse,
   CommunicationResponse,
@@ -201,6 +203,22 @@ export function useAIOrganizeDocuments(caseId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cases", caseId, "documents"] });
       queryClient.invalidateQueries({ queryKey: ["cases", caseId] });
+    },
+  });
+}
+
+export function useCaseAssistantChat(caseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: AssistantChatRequest) =>
+      apiClient.post<AssistantChatResponse>(
+        `/api/cases/${caseId}/assistant/chat`,
+        data
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cases", caseId, "documents"] });
+      queryClient.invalidateQueries({ queryKey: ["cases", caseId] });
+      queryClient.invalidateQueries({ queryKey: ["cases", caseId, "document-duplicates"] });
     },
   });
 }

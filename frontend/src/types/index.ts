@@ -154,6 +154,28 @@ export interface AIDocumentOrganizationResponse {
   documents: DocumentSectionSuggestion[];
 }
 
+export type AssistantRole = "user" | "assistant";
+
+export interface AssistantMessage {
+  role: AssistantRole;
+  content: string;
+}
+
+export interface AssistantToolCall {
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  result_summary: string;
+}
+
+export interface AssistantChatRequest {
+  messages: AssistantMessage[];
+}
+
+export interface AssistantChatResponse {
+  message: AssistantMessage;
+  tool_calls: AssistantToolCall[];
+}
+
 // ── Communication ───────────────────────────────────────
 export type CommType = "EMAIL" | "CALL" | "NOTE";
 

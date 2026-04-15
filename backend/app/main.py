@@ -26,6 +26,7 @@ from app.middleware.request_logging import (
 
 # ── Routers ──────────────────────────────────────────────
 from app.api.routers.auth import router as auth_router
+from app.api.routers.assistant import router as assistant_router
 from app.api.routers.cases import case_router, client_router
 from app.api.routers.documents import router as documents_router
 from app.api.routers.email_webhook import router as email_webhook_router
@@ -134,6 +135,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 # ── Register Routers ────────────────────────────────────
 app.include_router(auth_router)
+app.include_router(assistant_router)
 app.include_router(client_router)
 app.include_router(case_router)
 app.include_router(documents_router)

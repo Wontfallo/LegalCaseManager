@@ -224,21 +224,34 @@ input[type="range"].minimap-slider::-webkit-slider-thumb {
 
 /* Scrollbar styling */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  @apply bg-slate-100 rounded;
-}
-
-.dark .custom-scrollbar::-webkit-scrollbar-track {
-  @apply bg-slate-900;
+  background: transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 rounded hover:bg-slate-400;
+  @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
 }
 
-.dark .custom-scrollbar::-webkit-scrollbar-thumb {
-  @apply bg-slate-700 hover:bg-slate-600;
+/* Glassmorphism */
+.glass-panel {
+  @apply backdrop-blur-md bg-white/5 border border-white/10 shadow-[0_8px_30px_rgba(0,0,0,0.3)];
 }
+
+.glass-panel-heavy {
+  @apply backdrop-blur-xl bg-white/10 border border-white/20 shadow-[0_15px_45px_rgba(0,0,0,0.5)];
+}
+
+/* Custom animations */
+@keyframes glowPulse {
+  0% { shadow: 0 0 5px rgba(130, 81, 238, 0.2); }
+  50% { shadow: 0 0 20px rgba(130, 81, 238, 0.4); }
+  100% { shadow: 0 0 5px rgba(130, 81, 238, 0.2); }
+}
+
+.animate-glow {
+  animation: glowPulse 3s infinite ease-in-out;
+}
+

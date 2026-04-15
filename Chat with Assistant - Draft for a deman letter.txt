@@ -1,0 +1,115 @@
+LegalCM
+Cases
+Settings
+
+Light Mode
+HOA SUMMERHILL
+OPEN
+Client:
+Gerald Jackson
+
+117
+
+Documents
+
+0
+
+Communications
+
+102
+
+Events
+
+Overview
+Documents
+Communication Logs
+Timeline
+Assistant
+Case Assistant
+
+Chat With Your Documents
+Ask questions about the case, tell it to reorganize files, search for topics, or review likely duplicates.
+
+I can review this case, discuss your documents, organize files, search for topics, and surface duplicates. Ask directly.
+
+When was the earliest that any mention of damaged balcony's or deck repairs or something similar was mention? Anything before 2023?
+
+The earliest mention of balcony or deck issues in your documents dates back to **May 2021**.
+
+According to the **"5-6-2021 SummerHill - Reserve Study Documents Known Balcony Issues.pdf"** (Document ID: `8616386c-8fc2-4260-b39c-422753692fab`), a site inspection was conducted on **May 6, 2021**. This study was prepared to help the Association plan for capital repairs and specifically includes:
+
+*   **Phased Replacement/Repairs:** The report mentions "Roof Inspections and Capital Repairs" and "Roofs, Flat, Replace with TPO, Phased (Incl. Decks)" as part of the long-term financial planning.
+*   **Maintenance Forecast:** It identifies concrete sidewalks and metal railings (often associated with balcony structures) for replacement/repair starting around 2024.
+
+Additionally, the **"Summerhill Rules and Regulations (revised 2021).pdf"** (Document ID: `3e305d60-15f3-48cc-99d5-04f3f49c2f0c`) includes specific sections on **Balconies/Patios** (Section IX), indicating that management and maintenance of these areas were already a documented concern by the time these rules were updated in 2021.
+
+While the more urgent engineering reports (like the Encompass report) appear in late 2023, the Association's financial and governing documents show they were tracking these assets and their eventual need for repair as early as mid-2021.
+
+Draft a legal demand letter for documents that I need to help me with this mess. I will probably need beside the management contract and the financials that I've been asking for already, I will probably need meeting minutes, going back even further, and a reserve study that was done prior to the 2021, and anything else you can think of.  Also you mention the Balconies/Patios were in the rules and regulations I am wondering if something got added there or what you mean by that.
+
+Based on your documents and the specific timeline we've identified, here is a draft demand letter and an explanation regarding the 2021 Rules and Regulations.
+
+### **Part 1: About the 2021 Rules & Regulations**
+In the **"Summerhill Rules and Regulations (revised 2021).pdf"** (Doc ID: `3e305d60`), Section IX specifically addresses **Balconies/Patios**. The key takeaway is that this document was a "2020 document-update" that **superseded all previous versions**. 
+
+The most relevant addition regarding your "mess" is the strict **Smoking Prohibition** (Section I.B), which explicitly includes balconies and decks. If the HOA is using "violations" to justify fines or pressure, this 2021 update is likely the source of those specific rules. Furthermore, you noted in your own notes (`a75e8dc1`) that the **2021 Reserve Study** incorrectly attributed certain balcony responsibilities, which may have been mirrored or triggered by these rule changes.
+
+***
+
+### **Part 2: Draft Demand Letter**
+
+**To:** Summerhill Association Board of Directors / Gassen Company Association Management  
+**From:** Gerald Jackson, Jr. (Unit 222)  
+**Date:** [Insert Date]  
+**Subject:** FORMAL DEMAND FOR ASSOCIATION RECORDS – MN STATUTE § 515B.3-118
+
+Pursuant to Minnesota Statutes regarding homeowner association governance and the Summerhill Association Governing Documents, I hereby demand access to the following records for inspection and photocopying. Please provide these within five (5) business days.
+
+**1. Management Contracts:**
+*   A full, unredacted copy of the current management agreement with Gassen Company.
+*   The complete management agreement with FirstService Residential (FSR) that was in effect from 2018 through 2024 (referenced in Doc ID: `88aeb0fa`).
+
+**2. Reserve Studies:**
+*   The full 2021 Reserve Study prepared by Building Reserves, Inc.
+*   **Any and all Reserve Studies conducted prior to 2021** (specifically any study from 2015–2020) to establish the baseline for "known" balcony issues.
+
+**3. Meeting Minutes & Governance:**
+*   All Board Meeting Minutes and Annual Meeting Minutes from **January 2019 to the present**. (I specifically require minutes where the "Balcony Replacement Project" or "Special Assessments" were first discussed or voted upon).
+*   Records of all board votes regarding the selection of Paragon Construction and Encompass Engineering.
+
+**4. Financials & Project Accounting:**
+*   A detailed "Project Ledger" for the Balcony Replacement Project, showing all payments made to Paragon Construction and the source of those funds.
+*   The general ledger for the Association for the fiscal years 2022, 2023, and 2024.
+*   Verification of the "7% project fee" allegedly due to or collected by the management agent for the balcony project.
+
+**5. Engineering & Inspection Reports:**
+*   The full Encompass Engineering report (referenced in Doc ID: `31f6e02e`) and any supplemental reports or "varied scope" recommendations provided to the Board.
+
+**Failure to provide these documents as required by law may result in further legal action, including the filing of a petition in conciliation court to compel production and seek damages.**
+
+Sincerely,
+
+Gerald Jackson, Jr.
+
+***
+
+### **Why I added these specific items:**
+*   **Pre-2021 Reserve Study:** You need to see if the HOA was "hiding" the balcony issues or failing to fund them in the 5 years leading up to the "emergency."
+*   **2019 Minutes:** This captures the transition from "routine maintenance" to "major project."
+*   **The 7% Fee:** Since you mentioned a potential conflict of interest regarding FSR's push for the project, getting the accounting of that fee is critical.
+*   **Project Ledger:** This will show if your $28,000 (and others') was actually spent on the project or absorbed into general mismanagement.
+
+Ask about your case, documents, duplicates, or tell it to organize the files...
+Send
+Quick Prompts
+
+Organize my files into the right sections.What documents mention balcony issues?Summarize the strongest evidence in this case.Find duplicate documents.
+Built-in Tools
+
+Organize documents
+List documents
+Open document details
+Semantic search
+Scan duplicates
+This assistant is scoped to the current case. It can reason over summaries, OCR text, sections, and vector search results.
+
