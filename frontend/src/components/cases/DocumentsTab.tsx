@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { ChevronRightIcon, FolderIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
 import {
   useAIOrganizeDocuments,
   useCleanupDuplicateDocuments,
@@ -74,6 +75,23 @@ function StatusBadge({ status }: { status: DocStatus }) {
     </span>
   );
 }
+
+const getSectionDescription = (name: string) => {
+  const norm = name.toLowerCase();
+  
+  if (norm.includes("contract") || norm.includes("agreement")) return "Legally binding agreements and signed covenants.";
+  if (norm.includes("board meeting") || norm.includes("minutes")) return "Official records and corporate board meeting details.";
+  if (norm.includes("financial") || norm.includes("accounting") || norm.includes("bank") || norm.includes("receipt") || norm.includes("invoice")) return "Ledgers, accounting records, tax documents, and fiscal reports.";
+  if (norm.includes("email") || norm.includes("correspondence") || norm.includes("letter")) return "Electronic communications, letters, and correspondences.";
+  if (norm.includes("evidence") || norm.includes("photo") || norm.includes("video")) return "Exhibits, photographic records, and raw evidentiary artifacts.";
+  if (norm.includes("governing") || norm.includes("bylaws")) return "Foundational corporate records and operating agreements.";
+  if (norm.includes("medical") || norm.includes("health")) return "Medical records, bills, and provider documentation.";
+  if (norm.includes("court") || norm.includes("pleading") || norm.includes("filing")) return "Official court filings, pleadings, and docket records.";
+  if (norm.includes("police") || norm.includes("accident")) return "Law enforcement reports and accident documentation.";
+  if (norm.includes("ungrouped") || norm.includes("general")) return "Uncategorized or miscellaneous case files.";
+  
+  return "Collection of organized legal case documents and related files.";
+};
 
 export default function DocumentsTab({ caseId }: Props) {
   const queryClient = useQueryClient();
@@ -887,37 +905,77 @@ export default function DocumentsTab({ caseId }: Props) {
               {sectionEntries.map(([sectionName, sectionDocs]) => (
                 <div key={sectionName} className="space-y-3">
                   <div
-                    className="sticky top-0 z-10 rounded-lg surface-inset px-3 py-2"
-                    onDragOver={(e) => e.preventDefault()}
+                    className="sticky top-0 z-10 mb-2 group pt-2 pb-1 bg-[hsl(240,6%,10%)]"
+                    onDragOver={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.add("ring-2", "ring-[#8251EE]", "bg-[#8251EE]/10");
+                    }}
+                    onDragLeave={(e) => {
+                        e.currentTarget.classList.remove("ring-2", "ring-[#8251EE]", "bg-[#8251EE]/10");
+                    }}
                     onDrop={(e) => {
                       e.preventDefault();
+                      e.currentTarget.classList.remove("ring-2", "ring-[#8251EE]", "bg-[#8251EE]/10");
                       const droppedDocId = e.dataTransfer.getData("text/plain");
                       if (droppedDocId) {
                         void handleDropDocument(droppedDocId, sectionName, sectionDocs.length);
                       }
                     }}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => toggleSectionCollapsed(sectionName)}
-                          className="text-xs text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-                        >
-                          {collapsedSections[sectionName] ? "Expand" : "Collapse"}
-                        </button>
-                        <h4 className="text-sm font-semibold text-heading">
-                          {sectionName}
-                        </h4>
-                        <button
-                          onClick={() => void handleRenameSection(sectionName)}
-                          className="text-xs text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-                        >
-                          Rename
-                        </button>
-                      </div>
-                      <span className="text-xs text-muted">
-                        {sectionDocs.length} doc{sectionDocs.length === 1 ? "" : "s"}
-                      </span>
+                    <div 
+                      className="relative overflow-hidden rounded-xl bg-gradient-to-r from-[#282C36] to-[#1E2129] backdrop-blur-md border border-white/10 shadow-lg transition-all duration-300 hover:border-white/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer select-none"
+                      onClick={() => toggleSectionCollapsed(sectionName)}
+                    >
+                        <div className="absolute inset-0 bg-gradient-to-r from-[#8251EE]/0 via-[#8251EE]/10 to-[#8251EE]/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                        
+                        <div className="flex items-center justify-between px-5 py-3.5 relative z-20">
+                            <div className="flex items-center gap-4">
+                                <motion.div
+                                    initial={false}
+                                    animate={{ rotate: collapsedSections[sectionName] ? 0 : 90 }}
+                                    transition={{ duration: 0.2, ease: "easeInOut" }}
+                                    className="flex items-center justify-center w-7 h-7 rounded-full bg-white/10 group-hover:bg-white/20 text-white/70 group-hover:text-white transition-colors"
+                                >
+                                    <ChevronRightIcon className="w-4 h-4 ml-0.5" />
+                                </motion.div>
+                                
+                                <div className="flex items-center gap-3">
+                                    <div className="p-1.5 rounded-lg bg-[#8251EE]/15 border border-[#8251EE]/30 shadow-inner">
+                                        <FolderIcon className="w-4 h-4 text-[#A888FA]" />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <h4 className="text-[17px] font-semibold tracking-wide text-white group-hover:text-white transition-colors">
+                                            {sectionName}
+                                        </h4>
+                                        <p className="text-[13px] text-[#A1A1AA] group-hover:text-[#D4D4D8] transition-colors mt-[1px] font-medium max-w-lg truncate pr-4">
+                                            {getSectionDescription(sectionName)}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        void handleRenameSection(sectionName);
+                                    }}
+                                    className="opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 border border-transparent hover:border-white/20 text-white/80 hover:text-white"
+                                    title="Rename Section"
+                                >
+                                    <PencilSquareIcon className="w-4 h-4" />
+                                </button>
+                                
+                                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#121419]/60 border border-white/10 shadow-inner">
+                                    <span className="text-sm font-bold text-[#A888FA]">
+                                        {sectionDocs.length}
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-white/50 uppercase tracking-widest mt-0.5">
+                                        doc{sectionDocs.length === 1 ? "" : "s"}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                   </div>
 
