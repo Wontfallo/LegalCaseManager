@@ -97,7 +97,7 @@ def _build_user_prompt(text_payload: str, timestamp_context: str | None) -> str:
     return f"""Analyze the following text and extract all chronological events:{context_line}
 
 ---BEGIN TEXT---
-{text_payload[:15000]}
+{text_payload}
 ---END TEXT---"""
 
 
@@ -318,32 +318,79 @@ async def extract_timeline_events(
 
 
 # ── Document Summarization ──────────────────────────────
-SUMMARY_SYSTEM_PROMPT = """You are an expert legal document analyst. Summarize the provided document text into a clear, concise paragraph. Focus on:
-- The type of document (contract, complaint, motion, letter, invoice, report, etc.)
-- Key parties, dates, and amounts mentioned
-- The main purpose or subject matter
-- Any critical deadlines, obligations, or outcomes
+SUMMARY_SYSTEM_PROMPT = """You are a highly intelligent legal document summarization AI.
 
-Rules:
-- Write exactly ONE paragraph, 3-6 sentences.
-- Use plain, professional language. No bullet points or lists.
-- If the text is illegible or too short to summarize meaningfully, say so briefly.
-- Do NOT include any preamble like "This document..." — start directly with the substance."""
+You MUST return your response as valid JSON with exactly two keys:
+- "title": A concise, intelligent document title (max 80 chars). Describe WHAT the document is, WHO it involves, and WHEN (include the date). Examples:
+  - "Gerald Jackson Letter to Board Re: Meeting Minutes Access - Sept 9, 2024"
+  - "Chestnut Cambronne Collection Notice - $2,847.50 Past Due - Aug 15, 2023"
+  - "Annual Board Meeting Minutes - March 12, 2024"
+  - "Homeowner Ledger - Gerald Jackson Unit 204 - Jan-Dec 2023"
+  - "Engineering Inspection Report - Balcony Replacement Phase 2 - Oct 2023"
+  Do NOT use the filename. Derive a meaningful title from the document content.
+- "summary": A thorough, useful summary (300-600 words). You MUST include:
+  1. The document date (exact date it was written, sent, or signed — this is critical for filing)
+  2. The parties involved (full names, roles, organizations)
+  3. The main subject and purpose of the document
+  4. All key facts, dollar amounts, deadlines, decisions, or actions described
+  5. Any legal significance, demands, violations, or consequences mentioned
+  Be specific and factual. Write in clear prose. Do not be vague.
 
-VISION_SUMMARY_PROMPT = """You are an expert legal analyst examining an image from a legal case file. Describe what you see in detail. Focus on:
-- What the image depicts (photo, diagram, handwritten note, receipt, property damage, etc.)
-- Any visible text, labels, dates, or numbers
-- People, objects, locations, or conditions shown
-- Anything legally relevant (evidence of damage, signatures, stamps, markings)
+Return ONLY valid JSON. No markdown, no code fences, no extra text."""
 
-Rules:
-- Write exactly ONE paragraph, 3-8 sentences.
-- Be specific and factual about what is visible. Do not speculate beyond what the image shows.
-- If there is some text visible, incorporate it into the description.
-- Use plain, professional language."""
+VISION_SUMMARY_PROMPT = """You are an expert legal analyst examining an image from a legal case file.
+
+You MUST return your response as valid JSON with exactly two keys:
+- "title": A concise, intelligent title for this image (max 80 chars). Describe what the image shows. Examples:
+  - "Property Damage Photo - Water Stain on Unit 204 Ceiling"
+  - "USPS Certified Mail Receipt - Tracking #9407"
+  - "Handwritten Note - Board Meeting Attendance List"
+- "summary": A detailed description of the image. Focus on:
+  - What the image depicts (photo, diagram, handwritten note, receipt, property damage, etc.)
+  - Any visible text, labels, dates, or numbers
+  - People, objects, locations, or conditions shown
+  - Anything legally relevant (evidence of damage, signatures, stamps, markings)
+  Write exactly ONE paragraph, 3-8 sentences. Be specific and factual.
+
+Return ONLY valid JSON. No markdown, no code fences, no extra text."""
 
 # Minimum chars of meaningful OCR text to consider a document "text-heavy"
 _MIN_TEXT_FOR_OCR_SUMMARY = 200
+
+
+def _parse_title_summary_response(raw: str) -> tuple[str | None, str | None]:
+    """Parse an LLM response expecting JSON with 'title' and 'summary' keys.
+    Falls back gracefully if the response is plain text."""
+    import re as _re
+
+    cleaned = raw.strip()
+    # Strip markdown code fences
+    if cleaned.startswith("```"):
+        lines = cleaned.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        cleaned = "\n".join(lines).strip()
+
+    # Try JSON parse
+    try:
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, dict):
+            return parsed.get("title"), parsed.get("summary")
+    except json.JSONDecodeError:
+        # Try to find JSON object in the text
+        obj_match = _re.search(r"\{.*\}", cleaned, _re.DOTALL)
+        if obj_match:
+            try:
+                parsed = json.loads(obj_match.group())
+                if isinstance(parsed, dict):
+                    return parsed.get("title"), parsed.get("summary")
+            except json.JSONDecodeError:
+                pass
+
+    # Fallback: treat entire response as summary, no title
+    return None, cleaned if cleaned else None
 
 
 async def summarize_document(
@@ -353,7 +400,7 @@ async def summarize_document(
     file_type: str | None = None,
 ) -> str | None:
     """
-    Generate an AI summary of a document and persist it.
+    Generate an AI title and summary of a document and persist both.
 
     For text-heavy documents (substantial OCR output), summarizes the text.
     For images with sparse text, uses the vision model to describe the image.
@@ -377,9 +424,7 @@ async def summarize_document(
     clean_text = (text_payload or "").strip()
     is_image_file = file_type in ("png", "jpg", "jpeg", "tiff", "tif", "bmp")
     use_vision = (
-        is_image_file
-        and image_path
-        and len(clean_text) < _MIN_TEXT_FOR_OCR_SUMMARY
+        is_image_file and image_path and len(clean_text) < _MIN_TEXT_FOR_OCR_SUMMARY
     )
 
     if not use_vision and not clean_text:
@@ -397,36 +442,48 @@ async def summarize_document(
     try:
         if use_vision:
             # Vision-based summary — send the image to the model
+            assert image_path is not None  # guaranteed by use_vision check above
             ocr_hint = ""
             if clean_text:
                 ocr_hint = f"\n\nOCR detected the following partial text in the image:\n{clean_text[:2000]}"
-            user_prompt = f"Describe and summarize the contents of this image from a legal case file.{ocr_hint}"
+            user_prompt = f"Describe and summarize the contents of this image from a legal case file. Return JSON with title and summary.{ocr_hint}"
 
-            summary = await chat_completion(
+            img_paths: list[str] = [image_path]
+            raw_response = await chat_completion(
                 system_prompt=VISION_SUMMARY_PROMPT,
                 user_prompt=user_prompt,
                 temperature=0.3,
-                max_tokens=512,
-                image_paths=[image_path],
+                max_tokens=8192,
+                json_mode=True,
+                image_paths=img_paths,
             )
         else:
             # Text-based summary — standard OCR text summarization
-            truncated = clean_text[:12000]
-            user_prompt = f"""Summarize the following legal document:\n\n---BEGIN DOCUMENT---\n{truncated}\n---END DOCUMENT---"""
+            user_prompt = f"""Generate a JSON object with "title" and "summary" for this document.
 
-            summary = await chat_completion(
+---BEGIN DOCUMENT---
+{clean_text}
+---END DOCUMENT---"""
+
+            raw_response = await chat_completion(
                 system_prompt=SUMMARY_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
                 temperature=0.2,
-                max_tokens=512,
+                max_tokens=8192,
+                json_mode=True,
             )
 
-        summary = summary.strip()
+        display_title, summary = _parse_title_summary_response(raw_response)
+
         if not summary:
             logger.warning("summarize_empty_response", document_id=str(document_id))
             return None
 
-        # Persist summary to database
+        summary = summary.strip()
+        if display_title:
+            display_title = display_title.strip()[:512]
+
+        # Persist title + summary to database
         async with async_session_factory() as session:
             result = await session.execute(
                 select(Document).where(Document.id == document_id)
@@ -434,11 +491,14 @@ async def summarize_document(
             doc = result.scalar_one_or_none()
             if doc:
                 doc.summary = summary
+                if display_title:
+                    doc.display_title = display_title
                 await session.commit()
                 logger.info(
                     "summary_persisted",
                     document_id=str(document_id),
                     summary_length=len(summary),
+                    display_title=display_title,
                 )
             else:
                 logger.error(

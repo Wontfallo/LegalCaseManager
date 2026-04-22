@@ -96,6 +96,7 @@ export interface DocumentResponse {
   page_count: number | null;
   is_vectorized: boolean;
   summary: string | null;
+  display_title: string | null;
   text_fingerprint: string | null;
   created_at: string;
 }
@@ -154,6 +155,7 @@ export interface AIDocumentOrganizationResponse {
   documents: DocumentSectionSuggestion[];
 }
 
+// ── Assistant ────────────────────────────────────────────
 export type AssistantRole = "user" | "assistant";
 
 export interface AssistantMessage {
@@ -168,12 +170,52 @@ export interface AssistantToolCall {
 }
 
 export interface AssistantChatRequest {
-  messages: AssistantMessage[];
+  session_id?: string | null;
+  message: string;
 }
 
 export interface AssistantChatResponse {
   message: AssistantMessage;
   tool_calls: AssistantToolCall[];
+  session_id: string;
+  session_title: string | null;
+}
+
+// ── Chat Sessions ────────────────────────────────────────
+export interface ChatMessageResponse {
+  id: string;
+  role: AssistantRole;
+  content: string;
+  created_at: string;
+}
+
+export interface ChatSessionListItem {
+  id: string;
+  title: string | null;
+  is_pinned: boolean;
+  message_count: number;
+  last_message_at: string | null;
+  preview: string | null;
+  created_at: string;
+}
+
+export interface ChatSessionDetail {
+  id: string;
+  title: string | null;
+  is_pinned: boolean;
+  messages: ChatMessageResponse[];
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface ChatSessionUpdateRequest {
+  title?: string | null;
+  is_pinned?: boolean;
+}
+
+export interface ChatSessionExportResponse {
+  document_id: string;
+  message: string;
 }
 
 // ── Communication ───────────────────────────────────────

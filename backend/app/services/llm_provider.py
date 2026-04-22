@@ -69,7 +69,7 @@ PROVIDER_DEFAULTS: dict[ProviderType, dict[str, str]] = {
     },
     ProviderType.GOOGLE_GEMINI: {
         "base_url": "https://generativelanguage.googleapis.com/v1beta",
-        "chat_model": "gemini-2.0-flash",
+        "chat_model": "gemini-1.5-pro",
         "embedding_model": "text-embedding-004",
     },
     ProviderType.LM_STUDIO: {
@@ -362,11 +362,13 @@ async def get_copilot_available_models() -> list[dict[str, Any]]:
         model_id = m.get("id", "")
         caps = m.get("capabilities", {})
         model_type = caps.get("type", "chat") if caps else "chat"
-        result.append({
-            "id": model_id,
-            "name": m.get("name", model_id),
-            "type": model_type,
-        })
+        result.append(
+            {
+                "id": model_id,
+                "name": m.get("name", model_id),
+                "type": model_type,
+            }
+        )
 
     result.sort(key=lambda x: x["id"])
     return result
@@ -403,8 +405,19 @@ def _load_all_configs() -> dict[str, ProviderConfig]:
 
 
 def _save_provider_config(config: ProviderConfig) -> None:
-    """Save a single provider config (merges with existing)."""
+    """Save a single provider config (merges with existing).
+
+    When enabling a provider, all other providers are automatically disabled
+    so that only one provider is active at a time.
+    """
     all_configs = _load_all_configs()
+
+    # Exclusive selection: enabling one provider disables all others.
+    if config.enabled:
+        for key, cfg in all_configs.items():
+            if key != config.provider_type.value:
+                cfg.enabled = False
+
     all_configs[config.provider_type.value] = config
 
     PROVIDER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -637,10 +650,15 @@ async def _openai_compatible_chat(
             suffix = p.suffix.lower()
             mime = _MIME_MAP.get(suffix, "image/png")
             img_b64 = base64.b64encode(p.read_bytes()).decode("ascii")
-            content_parts.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:{mime};base64,{img_b64}", "detail": "auto"},
-            })
+            content_parts.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{mime};base64,{img_b64}",
+                        "detail": "auto",
+                    },
+                }
+            )
         user_content = content_parts
         logger.info("vision_request", image_count=len(image_paths))
     else:
@@ -703,10 +721,35 @@ async def _gemini_chat(
     max_tokens: int,
 ) -> str:
     """Chat completion using Google Gemini's native API."""
-    api_url = (
-        f"{config.base_url}/models/{config.chat_model}:generateContent"
-        f"?key={config.api_key}"
-    )
+    from app.services.google_service import google_service
+    
+    # Try to get OAuth credentials first
+    creds = None
+    try:
+        # In local mode, we just take the first user's creds
+        from app.core.database import async_session_factory
+        from app.models.user import User
+        from sqlalchemy import select
+        async with async_session_factory() as session:
+            res = await session.execute(select(User.id).limit(1))
+            uid = res.scalar_one_or_none()
+            if uid:
+                creds = await google_service.get_credentials(uid)
+    except Exception:
+        pass
+
+    if creds and creds.token:
+        api_url = f"{config.base_url}/models/{config.chat_model}:generateContent"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {creds.token}"
+        }
+    else:
+        api_url = (
+            f"{config.base_url}/models/{config.chat_model}:generateContent"
+            f"?key={config.api_key}"
+        )
+        headers = {"Content-Type": "application/json"}
 
     payload = {
         "contents": [
@@ -727,7 +770,7 @@ async def _gemini_chat(
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 api_url,
-                headers={"Content-Type": "application/json"},
+                headers=headers,
                 json=payload,
             )
             response.raise_for_status()
@@ -867,10 +910,34 @@ async def _gemini_embeddings(
     texts: list[str],
 ) -> list[list[float]]:
     """Embeddings via Google Gemini API."""
-    api_url = (
-        f"{config.base_url}/models/{config.embedding_model}:batchEmbedContents"
-        f"?key={config.api_key}"
-    )
+    from app.services.google_service import google_service
+    
+    # Try to get OAuth credentials first
+    creds = None
+    try:
+        from app.core.database import async_session_factory
+        from app.models.user import User
+        from sqlalchemy import select
+        async with async_session_factory() as session:
+            res = await session.execute(select(User.id).limit(1))
+            uid = res.scalar_one_or_none()
+            if uid:
+                creds = await google_service.get_credentials(uid)
+    except Exception:
+        pass
+
+    if creds and creds.token:
+        api_url = f"{config.base_url}/models/{config.embedding_model}:batchEmbedContents"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {creds.token}"
+        }
+    else:
+        api_url = (
+            f"{config.base_url}/models/{config.embedding_model}:batchEmbedContents"
+            f"?key={config.api_key}"
+        )
+        headers = {"Content-Type": "application/json"}
 
     requests_list = [
         {
@@ -885,7 +952,7 @@ async def _gemini_embeddings(
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 api_url,
-                headers={"Content-Type": "application/json"},
+                headers=headers,
                 json={"requests": requests_list},
             )
             response.raise_for_status()

@@ -28,6 +28,7 @@ from app.middleware.request_logging import (
 from app.api.routers.auth import router as auth_router
 from app.api.routers.assistant import router as assistant_router
 from app.api.routers.cases import case_router, client_router
+from app.api.routers.chat_sessions import router as chat_sessions_router
 from app.api.routers.documents import router as documents_router
 from app.api.routers.email_webhook import router as email_webhook_router
 from app.api.routers.twilio_webhook import router as twilio_webhook_router
@@ -37,6 +38,7 @@ from app.api.routers.timeline import (
     search_router,
     timeline_router,
 )
+from app.api.routers.integrations import router as integrations_router
 
 setup_logging()
 logger = get_logger("main")
@@ -136,6 +138,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # ── Register Routers ────────────────────────────────────
 app.include_router(auth_router)
 app.include_router(assistant_router)
+app.include_router(chat_sessions_router)
 app.include_router(client_router)
 app.include_router(case_router)
 app.include_router(documents_router)
@@ -145,6 +148,7 @@ app.include_router(timeline_router)
 app.include_router(comm_router)
 app.include_router(search_router)
 app.include_router(providers_router)
+app.include_router(integrations_router)
 
 
 # ── Health Check ─────────────────────────────────────────

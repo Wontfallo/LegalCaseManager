@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     mistral_api_key: str = ""
     mistral_ocr_endpoint: str = "https://api.mistral.ai/v1/ocr"
 
+    # ── Google OAuth2 ────────────────────────────────────
+    google_client_id: str = ""
+    google_client_secret: str = ""
+
     # ── ChromaDB ─────────────────────────────────────────
     chroma_host: str = "localhost"
     chroma_port: int = 8000

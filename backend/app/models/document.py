@@ -51,6 +51,8 @@ class Document(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     # AI-generated summary
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # AI-generated intelligent document title
+    display_title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     text_fingerprint: Mapped[str | None] = mapped_column(
         String(64), nullable=True, index=True
     )

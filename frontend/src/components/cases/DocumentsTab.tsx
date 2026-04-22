@@ -3,8 +3,17 @@
 import { useEffect, useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { motion, AnimatePresence } from "framer-motion";
-import { ChevronRightIcon, FolderIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
+import {
+  Box, Typography, Button, TextField, Select, MenuItem, Stack, Paper, IconButton, CircularProgress,
+  Accordion, AccordionSummary, AccordionDetails, Card, CardContent, Checkbox, Chip, Dialog,
+  DialogTitle, DialogContent, DialogActions, Grid, Menu
+} from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import FolderIcon from "@mui/icons-material/Folder";
+import CloseIcon from "@mui/icons-material/Close";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
+import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
 import {
   useAIOrganizeDocuments,
   useCleanupDuplicateDocuments,
@@ -18,6 +27,9 @@ import {
   useScanImages,
   useUpdateDocumentOrganization,
   useUploadDocument,
+  useGoogleStatus,
+  useGoogleConnect,
+  useBackupToDrive,
 } from "@/hooks/useApi";
 import { apiClient } from "@/lib/api";
 import { formatDateTime } from "@/lib/utils";
@@ -93,9 +105,24 @@ const getSectionDescription = (name: string) => {
   return "Collection of organized legal case documents and related files.";
 };
 
+const STANDARD_SECTIONS = [
+  "Governing Documents",
+  "Board Meetings Agenda & Minutes",
+  "Contracts",
+  "Letters from Lawfirm",
+  "Reports and Bids",
+  "Emails (Lefky Law Firm)",
+  "Emails",
+  "Receipts USPS",
+  "Correspondence",
+  "Financials",
+  "Photos and Evidence",
+  "General",
+];
+
 export default function DocumentsTab({ caseId }: Props) {
   const queryClient = useQueryClient();
-  const collapsedSectionsStorageKey = `legalcm:documents:${caseId}:collapsed-sections`;
+  const expandedSectionsStorageKey = `legalcm:documents:${caseId}:expanded-sections`;
   const { data: documents, isLoading } = useCaseDocuments(caseId);
   const { data: duplicateScan, isLoading: duplicatesLoading } =
     useDocumentDuplicates(caseId);
@@ -109,17 +136,21 @@ export default function DocumentsTab({ caseId }: Props) {
   const resummarizeAllMutation = useResummarizeAll(caseId);
   const reOCRAllMutation = useReOCRAll(caseId);
   const scanImagesMutation = useScanImages(caseId);
+  const { data: googleStatus } = useGoogleStatus();
+  const googleConnectMutation = useGoogleConnect();
+  const backupToDriveMutation = useBackupToDrive(caseId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [compareDocId, setCompareDocId] = useState<string | null>(null);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [selectedDuplicateIds, setSelectedDuplicateIds] = useState<string[]>([]);
   const [showDuplicates, setShowDuplicates] = useState(false);
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [newSectionName, setNewSectionName] = useState("");
   const [bulkTargetSection, setBulkTargetSection] = useState("Ungrouped");
   const [draggingDocId, setDraggingDocId] = useState<string | null>(null);
+  const [actionsAnchorEl, setActionsAnchorEl] = useState<null | HTMLElement>(null);
 
   const groupedDocuments = (documents || []).reduce<Record<string, DocumentResponse[]>>(
     (acc, doc) => {
@@ -138,53 +169,34 @@ export default function DocumentsTab({ caseId }: Props) {
   const allSectionNames = Array.from(
     new Set(["Ungrouped", ...sectionEntries.map(([section]) => section)])
   );
+  
+  const allSectionsExpanded = allSectionNames.length > 0 && allSectionNames.every(name => expandedSections[name]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const saved = window.localStorage.getItem(collapsedSectionsStorageKey);
+      const saved = window.localStorage.getItem(expandedSectionsStorageKey);
       if (!saved) return;
       const parsed = JSON.parse(saved) as Record<string, boolean>;
-      setCollapsedSections(parsed);
+      setExpandedSections(parsed);
     } catch {
-      window.localStorage.removeItem(collapsedSectionsStorageKey);
+      window.localStorage.removeItem(expandedSectionsStorageKey);
     }
-  }, [collapsedSectionsStorageKey]);
+  }, [expandedSectionsStorageKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(
-      collapsedSectionsStorageKey,
-      JSON.stringify(collapsedSections)
+      expandedSectionsStorageKey,
+      JSON.stringify(expandedSections)
     );
-  }, [collapsedSections, collapsedSectionsStorageKey]);
+  }, [expandedSections, expandedSectionsStorageKey]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    // Validate file type
-    const allowedTypes = [
-      "application/pdf",
-      "image/png",
-      "image/jpeg",
-      "image/tiff",
-      "image/bmp",
-    ];
-
-    const validFiles = files.filter((file) => allowedTypes.includes(file.type));
-    const invalidFiles = files.filter((file) => !allowedTypes.includes(file.type));
-
-    if (invalidFiles.length > 0) {
-      toast.error(
-        `Skipped ${invalidFiles.length} unsupported file${invalidFiles.length === 1 ? "" : "s"}.`
-      );
-    }
-
-    if (validFiles.length === 0) {
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      return;
-    }
+    const validFiles = files; // Accept all formats naturally
 
     try {
       setUploadingCount(validFiles.length);
@@ -247,8 +259,8 @@ export default function DocumentsTab({ caseId }: Props) {
     }
   };
 
-  const toggleSectionCollapsed = (sectionName: string) => {
-    setCollapsedSections((current) => ({
+  const toggleSectionExpanded = (sectionName: string) => {
+    setExpandedSections((current) => ({
       ...current,
       [sectionName]: !current[sectionName],
     }));
@@ -355,48 +367,48 @@ export default function DocumentsTab({ caseId }: Props) {
   };
 
   const renderDocumentPreview = (doc: DocumentResponse, title: string) => (
-    <motion.div initial="initial" animate="animate" exit="exit" variants={fadeIn} className="rounded-xl border border-white/10 bg-[#12141A]/60 backdrop-blur-md p-6 shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
-      <div className="mb-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <p className="text-xl font-bold text-[#9366F5] tracking-wide">{doc.original_filename}</p>
+    <Card variant="outlined" sx={{ mb: 3 }}>
+      <CardContent>
+        <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "flex-start", mb: 3 }}>
+          <Box>
+            <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+              <Typography variant="h6" color="primary" sx={{ fontWeight: "bold" }}>
+                {doc.display_title || doc.original_filename}
+              </Typography>
               <StatusBadge status={doc.status} />
-            </div>
-            <p className="text-sm text-[#A1A1AA] mt-1.5 font-medium">
-              {title} <span className="mx-2">|</span> Type: <span className="text-white uppercase">{doc.file_type}</span>
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
+            </Stack>
+            {doc.display_title && doc.original_filename && (
+              <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5, fontStyle: 'italic' }}>
+                File: {doc.original_filename}
+              </Typography>
+            )}
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              {title} | Type: <Box component="span" sx={{ textTransform: "uppercase" }}>{doc.file_type}</Box>
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+            <Button
+              size="small"
               onClick={async () => {
                 try {
-                  const { blob, contentType } = await apiClient.getBlob(
-                    `/api/documents/${doc.id}/file`
-                  );
-                  const fileBlob =
-                    contentType && blob.type !== contentType
-                      ? new Blob([blob], { type: contentType })
-                      : blob;
+                  const { blob, contentType } = await apiClient.getBlob(`/api/documents/${doc.id}/file`);
+                  const fileBlob = contentType && blob.type !== contentType ? new Blob([blob], { type: contentType }) : blob;
                   const objectUrl = URL.createObjectURL(fileBlob);
                   window.open(objectUrl, "_blank", "noopener,noreferrer");
                   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
                 } catch (err: any) {
-                  toast.error(
-                    err?.response?.data?.detail || "Failed to open original document."
-                  );
+                  toast.error(err?.response?.data?.detail || "Failed to open original document.");
                 }
               }}
-              className="text-sm font-semibold text-[#8251EE] hover:text-[#9366F5] transition-colors"
             >
               Open Original
-            </button>
-            <button
+            </Button>
+            <Button
+              size="small"
+              color="inherit"
               onClick={async () => {
                 try {
-                  const { blob, filename } = await apiClient.getBlob(
-                    `/api/documents/${doc.id}/file`
-                  );
+                  const { blob, filename } = await apiClient.getBlob(`/api/documents/${doc.id}/file`);
                   const objectUrl = URL.createObjectURL(blob);
                   const anchor = document.createElement("a");
                   anchor.href = objectUrl;
@@ -406,66 +418,65 @@ export default function DocumentsTab({ caseId }: Props) {
                   anchor.remove();
                   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
                 } catch (err: any) {
-                  toast.error(
-                    err?.response?.data?.detail || "Failed to download original document."
-                  );
+                  toast.error(err?.response?.data?.detail || "Failed to download original document.");
                 }
               }}
-              className="text-sm font-semibold text-white hover:text-[#A1A1AA] transition-colors"
             >
               Download Original
-            </button>
-          </div>
-        </div>
-      </div>
+            </Button>
+          </Stack>
+        </Stack>
 
-      {doc.status === "failed" && (
-        <div className="rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/20 p-4 shadow-inner mb-4">
-          <p className="text-sm font-medium text-[#EF4444]">Processing Failed</p>
-          <p className="mt-1 text-sm text-[#EF4444]/80">
-            {doc.status_message || "An unknown error occurred during processing."}
-          </p>
-        </div>
-      )}
+        {doc.status === "failed" && (
+          <Paper variant="outlined" sx={{ p: 2, bgcolor: 'error.light', color: 'error.contrastText', mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: "bold" }}>Processing Failed</Typography>
+            <Typography variant="body2">{doc.status_message || "An unknown error occurred during processing."}</Typography>
+          </Paper>
+        )}
 
-      {(doc.status === "pending" || doc.status === "processing") && (
-        <div className="rounded-lg bg-[#F59E0B]/10 border border-[#F59E0B]/20 p-6 flex flex-col items-center justify-center text-center shadow-inner mb-4">
-          <div className="animate-spin h-8 w-8 rounded-full border-4 border-[#F59E0B] border-t-transparent mx-auto mb-3 shadow-[0_0_15px_rgba(245,158,11,0.5)]" />
-          <p className="text-sm font-medium text-[#F59E0B]">
-            {doc.status_message || "OCR processing in progress..."}
-          </p>
-        </div>
-      )}
+        {(doc.status === "pending" || doc.status === "processing") && (
+          <Paper variant="outlined" sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 2 }}>
+            <CircularProgress size={32} sx={{ mb: 2 }} />
+            <Typography variant="body2" color="text.secondary">
+              {doc.status_message || "OCR processing in progress..."}
+            </Typography>
+          </Paper>
+        )}
 
-      {doc.status === "completed" && (
-        <div className="space-y-6">
-          {doc.summary && (
-            <div className="rounded-xl bg-[#8251EE]/5 border border-[#8251EE]/20 p-5 shadow-inner">
-              <h4 className="text-sm font-bold text-[#8251EE] uppercase tracking-wider mb-3 flex items-center gap-2">
-                AI Summary
-              </h4>
-              <p className="text-base text-[#E7E9ED] leading-[1.8] line-clamp-none">{doc.summary}</p>
-            </div>
-          )}
-          {doc.raw_ocr_text ? (
-            <div>
-              <h4 className="text-sm font-bold text-[#A1A1AA] uppercase tracking-wider mb-3">
-                Extracted Text
-              </h4>
-              <div className="rounded-xl bg-[#0A0C10]/80 border border-white/5 p-5 max-h-[50vh] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent shadow-inner">
-                <pre className="text-sm text-[#D4D4D8] whitespace-pre-wrap font-mono leading-relaxed">
-                  {doc.raw_ocr_text}
-                </pre>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-xl bg-white/5 border border-white/10 p-6 text-center">
-              <p className="text-sm text-[#A1A1AA]">No text was extracted from this document.</p>
-            </div>
-          )}
-        </div>
-      )}
-    </motion.div>
+        {doc.status === "completed" && (
+          <Stack spacing={3}>
+            {doc.summary && (
+              <Box>
+                <Typography variant="subtitle2" color="primary" sx={{ mb: 1, textTransform: 'uppercase', fontWeight: "bold" }}>
+                  AI Summary
+                </Typography>
+                <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                  {doc.summary}
+                </Typography>
+              </Box>
+            )}
+            {doc.raw_ocr_text ? (
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1, textTransform: 'uppercase', fontWeight: "bold" }}>
+                  Extracted Text
+                </Typography>
+                <Paper variant="outlined" sx={{ p: 2, maxHeight: '50vh', overflowY: 'auto' }}>
+                  <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                    {doc.raw_ocr_text}
+                  </Typography>
+                </Paper>
+              </Box>
+            ) : (
+              <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
+                <Typography variant="body2" color="text.secondary">
+                  No text was extracted from this document.
+                </Typography>
+              </Paper>
+            )}
+          </Stack>
+        )}
+      </CardContent>
+    </Card>
   );
 
   const saveDocumentPlacement = async (
@@ -484,6 +495,13 @@ export default function DocumentsTab({ caseId }: Props) {
           },
         ],
       });
+      const targetLabel = sectionLabel || "Ungrouped";
+      const currentLabel = document.section_label || "Ungrouped";
+      if (targetLabel !== currentLabel) {
+        // Auto-expand the target section so the document is visible after the move
+        setExpandedSections(prev => ({ ...prev, [targetLabel]: true }));
+        toast.success(`Moved to "${targetLabel}".`);
+      }
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || "Failed to reorganize document.");
     }
@@ -520,7 +538,7 @@ export default function DocumentsTab({ caseId }: Props) {
     }
     setBulkTargetSection(sectionName);
     setNewSectionName("");
-    setCollapsedSections((current) => ({ ...current, [sectionName]: false }));
+    setExpandedSections((current) => ({ ...current, [sectionName]: true }));
     toast.success(`Section "${sectionName}" created.`);
   };
 
@@ -579,602 +597,532 @@ export default function DocumentsTab({ caseId }: Props) {
   };
 
   return (
-    <div className="h-full flex text-[#E7E9ED] bg-[hsl(240,6%,10%)] selection:bg-[#8251EE]/30 selection:text-white font-sans">
+    <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
       {/* Documents List */}
-      <div
-        className={`${
-          selectedDoc ? "w-1/2" : "w-full"
-        } border-r border-[#1E2128] bg-[hsl(240,5%,12%)]/40 overflow-auto transition-all duration-300 relative`}
+      <Box
+        sx={{
+          width: selectedDoc ? "50%" : "100%",
+          borderRight: 1,
+          borderColor: "divider",
+          bgcolor: "background.paper",
+          overflowY: "auto",
+          transition: "width 0.3s ease",
+        }}
       >
-        <div className="px-8 py-8 max-w-7xl mx-auto">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between mb-8 pb-6 border-b border-white/5">
-            <div>
-              <h3 className="text-2xl font-bold tracking-tight text-white flex items-center gap-3">
-                Documents
-                <span className="text-sm bg-[#8251EE]/20 text-[#8251EE] border border-[#8251EE]/30 px-3 py-1 rounded-full">{documents?.length || 0}</span>
-              </h3>
-              <p className="mt-1.5 text-base text-[#A1A1AA]">
-                Upload PDFs or images. Use AI Organize to auto-categorize.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                value={newSectionName}
-                onChange={(e) => setNewSectionName(e.target.value)}
-                placeholder="New section"
-                className="rounded-lg bg-black/40 border border-white/10 text-white placeholder-white/30 px-3 py-2 text-sm focus:outline-none focus:border-[#8251EE]/50 focus:ring-1 focus:ring-[#8251EE]/50 transition-all w-40"
-              />
-              <button
-                onClick={() => void handleCreateSection()}
-                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 transition-colors"
-              >
-                Add Section
-              </button>
-              <select
-                value={bulkTargetSection}
-                onChange={(e) => setBulkTargetSection(e.target.value)}
-                className="rounded-lg bg-black/40 border border-white/10 text-white px-3 py-2 text-sm focus:outline-none focus:border-[#8251EE]/50 transition-all w-40"
-              >
-                {allSectionNames.map((name) => (
-                  <option key={name} value={name} className="bg-[#1E2128]">
-                    {name}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => void handleBulkMove()}
-                disabled={selectedDocumentIds.length === 0}
-                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 disabled:opacity-50 transition-colors"
-              >
-                Move Selected
-              </button>
-              <button
-                onClick={async () => {
-                  await queryClient.invalidateQueries({
-                    queryKey: ["cases", caseId, "document-duplicates"],
-                  });
-                  setShowDuplicates(true);
-                }}
-                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 transition-colors"
-              >
-                {showDuplicates ? "Refresh Duplicates" : "Scan Duplicates"}
-              </button>
-              <button
-                onClick={async () => {
-                  try {
-                    const result = await aiOrganizeMutation.mutateAsync();
-                    toast.success(
-                      `AI organized ${result.documents.length} document${result.documents.length === 1 ? "" : "s"}.`
-                    );
-                  } catch (err: any) {
-                    toast.error(
-                      err?.response?.data?.detail || "Failed to AI-organize documents."
-                    );
-                  }
-                }}
-                disabled={aiOrganizeMutation.isPending}
-                className="rounded-lg bg-[#8251EE]/10 border border-[#8251EE]/30 px-3 py-2 text-sm font-medium text-[#8251EE] hover:bg-[#8251EE]/20 disabled:opacity-50 transition-colors"
-              >
-                {aiOrganizeMutation.isPending ? "AI Organizing..." : "AI Organize"}
-              </button>
-              <button
-                onClick={async () => {
-                  try {
-                    const result = await resummarizeAllMutation.mutateAsync();
-                    toast.success(result.message);
-                  } catch (err: any) {
-                    toast.error(err?.response?.data?.detail || "Failed to re-summarize.");
-                  }
-                }}
-                disabled={resummarizeAllMutation.isPending}
-                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 disabled:opacity-50 transition-colors"
-              >
-                {resummarizeAllMutation.isPending ? "Summarizing..." : "Re-summarize All"}
-              </button>
-              <button
-                onClick={async () => {
-                  if (!window.confirm("Re-run OCR on ALL documents? This will reprocess everything from scratch.")) return;
-                  try {
-                    const result = await reOCRAllMutation.mutateAsync();
-                    toast.success(result.message);
-                  } catch (err: any) {
-                    toast.error(err?.response?.data?.detail || "Failed to re-scan.");
-                  }
-                }}
-                disabled={reOCRAllMutation.isPending}
-                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 disabled:opacity-50 transition-colors"
-              >
-                {reOCRAllMutation.isPending ? "Re-scanning..." : "Re-scan All (OCR)"}
-              </button>
-              <button
-                onClick={async () => {
-                  try {
-                    const result = await scanImagesMutation.mutateAsync();
-                    toast.success(result.message);
-                  } catch (err: any) {
-                    toast.error(err?.response?.data?.detail || "No images found or scan failed.");
-                  }
-                }}
-                disabled={scanImagesMutation.isPending}
-                className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-medium text-white hover:bg-white/10 disabled:opacity-50 transition-colors"
-              >
-                {scanImagesMutation.isPending ? "Scanning..." : "Scan Images (Vision)"}
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                onChange={handleUpload}
-                multiple
-                accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp"
-                className="hidden"
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadMutation.isPending || uploadingCount > 0}
-                className="btn-primary"
-              >
-                {uploadingCount > 0
-                  ? `Uploading ${uploadingCount}...`
-                  : "+ Upload Documents"}
-              </button>
-            </div>
-          </div>
+        <Box sx={{ px: 4, py: 4, maxWidth: "xl", mx: "auto" }}>
+          <Stack 
+            direction={{ xs: 'column', xl: 'row' }} 
+            spacing={3} 
+            sx={{ 
+              alignItems: { xl: 'center' }, 
+              justifyContent: "space-between", 
+              mb: 4, 
+              pb: 3, 
+              borderBottom: 1, 
+              borderColor: 'divider',
+              minHeight: 72
+            }}
+          >
+            <Box>
+              <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+                <Typography variant="h5" sx={{ fontWeight: "bold" }}>
+                  Documents
+                </Typography>
+                <Chip
+                  label={documents?.length || 0}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  sx={{ fontWeight: "bold" }}
+                />
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Upload case files, documents, or images. Use AI Organize to auto-categorize.
+              </Typography>
+            </Box>
+
+            {selectedDocumentIds.length > 0 ? (
+              <Stack direction="row" spacing={2} sx={{ alignItems: "center", bgcolor: 'primary.dark', p: 1.5, borderRadius: 2 }}>
+                <Typography variant="subtitle2" sx={{ color: 'primary.contrastText', mr: 2, fontWeight: 'bold' }}>
+                  {selectedDocumentIds.length} Selected
+                </Typography>
+                <TextField
+                  select
+                  size="small"
+                  value={bulkTargetSection}
+                  onChange={(e) => setBulkTargetSection(e.target.value)}
+                  sx={{ width: 160, bgcolor: 'background.paper', borderRadius: 1, '& .MuiOutlinedInput-notchedOutline': { border: 'none' } }}
+                >
+                  {Array.from(new Set(["Ungrouped", ...STANDARD_SECTIONS, ...sectionEntries.map(([name]) => name)])).map((name) => (
+                    <MenuItem key={name} value={name}>
+                      {name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size="small"
+                  onClick={() => void handleBulkMove()}
+                >
+                  Move
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  size="small"
+                  onClick={() => setSelectedDocumentIds([])}
+                  sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.3)' }}
+                >
+                  Clear Selection
+                </Button>
+              </Stack>
+            ) : (
+              <Stack direction="row" spacing={1.5} useFlexGap sx={{ alignItems: "center", flexWrap: "wrap", justifyContent: { xs: "flex-start", xl: "flex-end" } }}>
+                 <Stack direction="row" spacing={1} sx={{ mr: { md: 2 }, pr: { md: 2 }, borderRight: { md: 1 }, borderColor: 'divider', alignItems: 'center' }}>
+                   <TextField
+                     size="small"
+                     value={newSectionName}
+                     onChange={(e) => setNewSectionName(e.target.value)}
+                     placeholder="New section..."
+                     sx={{ width: { xs: 140, sm: 180 } }}
+                   />
+                   <Button 
+                     variant="outlined" 
+                     size="small" 
+                     onClick={() => void handleCreateSection()} 
+                     disabled={!newSectionName.trim()}
+                     sx={{ whiteSpace: 'nowrap', minWidth: 'min-content' }}
+                   >
+                     Add
+                   </Button>
+                 </Stack>
+
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  onClick={async () => {
+                    try {
+                      const result = await aiOrganizeMutation.mutateAsync();
+                      toast.success(
+                        `AI organized ${result.documents.length} document${result.documents.length === 1 ? "" : "s"}.`
+                      );
+                    } catch (err: any) {
+                      toast.error(
+                        err?.response?.data?.detail || "Failed to AI-organize documents."
+                      );
+                    }
+                  }}
+                  disabled={aiOrganizeMutation.isPending}
+                >
+                  {aiOrganizeMutation.isPending ? "Organizing..." : "AI Organize"}
+                </Button>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleUpload}
+                  multiple
+                  style={{ display: "none" }}
+                />
+                <Button
+                  variant="contained"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadMutation.isPending || uploadingCount > 0}
+                >
+                  {uploadingCount > 0 ? `Uploading ${uploadingCount}...` : "+ Upload"}
+                </Button>
+
+                <IconButton onClick={(e) => setActionsAnchorEl(e.currentTarget)} sx={{ ml: 1, bgcolor: 'action.hover' }}>
+                  <MoreVertIcon />
+                </IconButton>
+                <Menu
+                  anchorEl={actionsAnchorEl}
+                  open={Boolean(actionsAnchorEl)}
+                  onClose={() => setActionsAnchorEl(null)}
+                  transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                  anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                >
+                  <MenuItem onClick={async () => {
+                    setActionsAnchorEl(null);
+                    try {
+                      await queryClient.invalidateQueries({
+                        queryKey: ["cases", caseId, "document-duplicates"],
+                      });
+                      setShowDuplicates(true);
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }}>
+                    {showDuplicates ? "Refresh Duplicates" : "Scan Duplicates"}
+                  </MenuItem>
+                  <MenuItem onClick={async () => {
+                    setActionsAnchorEl(null);
+                    try {
+                      const result = await resummarizeAllMutation.mutateAsync();
+                      toast.success(result.message);
+                    } catch (err: any) {
+                      toast.error(err?.response?.data?.detail || "Failed to re-summarize.");
+                    }
+                  }} disabled={resummarizeAllMutation.isPending}>
+                    Re-summarize All
+                  </MenuItem>
+                  <MenuItem onClick={async () => {
+                    setActionsAnchorEl(null);
+                    try {
+                      const result = await scanImagesMutation.mutateAsync();
+                      toast.success(result.message);
+                    } catch (err: any) {
+                      toast.error(err?.response?.data?.detail || "No images found or scan failed.");
+                    }
+                  }} disabled={scanImagesMutation.isPending}>
+                    Scan Images (Vision)
+                  </MenuItem>
+
+                  <MenuItem 
+                    onClick={async () => {
+                      setActionsAnchorEl(null);
+                      if (googleStatus?.connected) {
+                        try {
+                          const result = await backupToDriveMutation.mutateAsync();
+                          toast.success(result.message);
+                        } catch (err: any) {
+                          toast.error(err?.response?.data?.detail || "Backup failed.");
+                        }
+                      } else {
+                        try {
+                          const result = await googleConnectMutation.mutateAsync();
+                          window.location.href = result.url;
+                        } catch (err: any) {
+                          toast.error("Failed to start Google connection.");
+                        }
+                      }
+                    }} 
+                    disabled={backupToDriveMutation.isPending || googleConnectMutation.isPending}
+                  >
+                    {googleStatus?.connected ? "Backup to Google Drive" : "Connect Google Account"}
+                  </MenuItem>
+                  <MenuItem sx={{ color: 'error.main' }} onClick={async () => {
+                    setActionsAnchorEl(null);
+                    if (!window.confirm("Re-run OCR on ALL documents? This will reprocess everything from scratch.")) return;
+                    try {
+                      const result = await reOCRAllMutation.mutateAsync();
+                      toast.success(result.message);
+                    } catch (err: any) {
+                      toast.error(err?.response?.data?.detail || "Failed to re-scan.");
+                    }
+                  }} disabled={reOCRAllMutation.isPending}>
+                    Re-scan All (OCR)
+                  </MenuItem>
+                </Menu>
+              </Stack>
+            )}
+          </Stack>
 
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin h-6 w-6 rounded-full border-4 border-brand-600 border-t-transparent" />
-            </div>
+            <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+              <CircularProgress />
+            </Box>
           ) : !documents || documents.length === 0 ? (
-            <div className="text-center py-12">
-              <svg
-                className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1}
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-                />
-              </svg>
-              <p className="mt-3 text-sm text-muted">
+            <Box sx={{ textAlign: "center", py: 6 }}>
+              <Typography color="text.secondary">
                 No documents yet. Upload one or more PDFs or images to start.
-              </p>
-            </div>
+              </Typography>
+            </Box>
           ) : (
-            <div className="space-y-4">
+            <Stack spacing={3}>
               {showDuplicates && duplicateScan && duplicateScan.duplicate_groups.length > 0 && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div>
-                      <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-300">
-                        Possible Duplicates ({duplicateScan.duplicate_groups.length} group{duplicateScan.duplicate_groups.length === 1 ? "" : "s"})
-                      </h4>
-                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                <Paper variant="outlined" sx={{ p: 3, borderColor: 'warning.main', bgcolor: 'warning.light', color: 'warning.contrastText' }}>
+                  <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "flex-start", mb: 2 }}>
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ fontWeight: "bold" }}>
+                        Possible Duplicates ({duplicateScan.duplicate_groups.length} groups)
+                      </Typography>
+                      <Typography variant="caption">
                         Compare documents, then use bulk actions or resolve individually.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => {
-                          setShowDuplicates(false);
-                          setSelectedDuplicateIds([]);
-                        }}
-                        className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-xs font-medium text-body hover:bg-slate-100 dark:hover:bg-slate-800"
-                      >
+                      </Typography>
+                    </Box>
+                    <Stack direction="row" spacing={1}>
+                      <Button size="small" variant="outlined" color="inherit" onClick={() => { setShowDuplicates(false); setSelectedDuplicateIds([]); }}>
                         Dismiss
-                      </button>
-                      <button
-                        onClick={() => void handleDeleteSelectedDuplicates()}
-                        disabled={
-                          selectedDuplicateIds.length === 0 ||
-                          cleanupDuplicatesMutation.isPending
-                        }
-                        className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
-                      >
+                      </Button>
+                      <Button size="small" variant="contained" color="error" disabled={selectedDuplicateIds.length === 0 || cleanupDuplicatesMutation.isPending} onClick={() => void handleDeleteSelectedDuplicates()}>
                         Delete Selected ({selectedDuplicateIds.length})
-                      </button>
-                      <button
-                        onClick={async () => {
-                          const allDupeIds = duplicateScan.duplicate_groups.flatMap((g) =>
-                            g.documents.slice(1).map((d) => d.document_id)
-                          );
+                      </Button>
+                      <Button size="small" variant="contained" color="error" disabled={cleanupDuplicatesMutation.isPending} onClick={async () => {
+                          const allDupeIds = duplicateScan.duplicate_groups.flatMap((g) => g.documents.slice(1).map((d) => d.document_id));
                           if (allDupeIds.length === 0) return;
-                          if (
-                            !window.confirm(
-                              `Delete ${allDupeIds.length} duplicate${allDupeIds.length === 1 ? "" : "s"} across all groups? The first document in each group will be kept.`
-                            )
-                          ) return;
+                          if (!window.confirm(`Delete ${allDupeIds.length} duplicates across all groups? The first document in each group will be kept.`)) return;
                           try {
-                            await cleanupDuplicatesMutation.mutateAsync({
-                              case_id: caseId,
-                              document_ids: allDupeIds,
-                              keep_document_id: null,
-                            });
+                            await cleanupDuplicatesMutation.mutateAsync({ case_id: caseId, document_ids: allDupeIds, keep_document_id: null });
                             setSelectedDuplicateIds([]);
                             setShowDuplicates(false);
-                            toast.success(`Deleted ${allDupeIds.length} duplicate${allDupeIds.length === 1 ? "" : "s"}.`);
+                            toast.success(`Deleted ${allDupeIds.length} duplicates.`);
                           } catch (err: any) {
                             toast.error(err?.response?.data?.detail || "Failed to delete duplicates.");
                           }
-                        }}
-                        disabled={cleanupDuplicatesMutation.isPending}
-                        className="rounded-md bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-800 disabled:opacity-50"
-                      >
+                      }}>
                         Delete All Duplicates
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
+                      </Button>
+                    </Stack>
+                  </Stack>
+                  <Stack spacing={2}>
                     {duplicateScan.duplicate_groups.map((group, index) => {
                       const groupDocIds = group.documents.map((d) => d.document_id);
                       const allGroupSelected = groupDocIds.every((id) => selectedDuplicateIds.includes(id));
                       const someGroupSelected = groupDocIds.some((id) => selectedDuplicateIds.includes(id));
                       return (
-                      <div key={`${group.reason}-${index}`} className="rounded-md border border-amber-200 bg-white p-3 dark:border-amber-800 dark:bg-slate-900">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={allGroupSelected}
-                              ref={(el) => { if (el) el.indeterminate = someGroupSelected && !allGroupSelected; }}
-                              onChange={() => {
-                                if (allGroupSelected) {
-                                  setSelectedDuplicateIds((c) => c.filter((id) => !groupDocIds.includes(id)));
-                                } else {
-                                  setSelectedDuplicateIds((c) => [...new Set([...c, ...groupDocIds])]);
-                                }
-                              }}
-                            />
-                            <p className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                              {group.reason}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
+                        <Paper key={`${group.reason}-${index}`} sx={{ p: 2 }}>
+                          <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+                            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                              <Checkbox 
+                                size="small" 
+                                checked={allGroupSelected} 
+                                indeterminate={someGroupSelected && !allGroupSelected} 
+                                onChange={() => {
+                                  if (allGroupSelected) {
+                                    setSelectedDuplicateIds((c) => c.filter((id) => !groupDocIds.includes(id)));
+                                  } else {
+                                    setSelectedDuplicateIds((c) => [...new Set([...c, ...groupDocIds])]);
+                                  }
+                                }} 
+                              />
+                              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: "bold", textTransform: "uppercase" }}>
+                                {group.reason}
+                              </Typography>
+                            </Stack>
                             {group.documents.length >= 2 && (
-                              <button
-                                onClick={() => handleCompareDuplicate(group.documents[0].document_id, group)}
-                                className="text-xs font-medium text-brand-600 hover:text-brand-800"
-                              >
-                                Compare
-                              </button>
+                               <Button size="small" onClick={() => handleCompareDuplicate(group.documents[0].document_id, group)}>
+                                 Compare
+                               </Button>
                             )}
-                          </div>
-                        </div>
-                        <div className="mt-2 space-y-2">
-                          {group.documents.map((candidate) => (
-                            <div key={candidate.document_id} className="flex items-center justify-between gap-3 rounded-md border border-slate-200 dark:border-slate-700 p-2 text-xs text-body">
-                              <label className="flex items-center gap-2 min-w-0 flex-1">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedDuplicateIds.includes(candidate.document_id)}
-                                  onChange={() =>
-                                    toggleDuplicateSelection(candidate.document_id)
-                                  }
-                                />
-                                <span className="truncate">
-                                  {candidate.original_filename || candidate.document_id}
-                                </span>
-                              </label>
-                              <div className="flex items-center gap-3">
-                                <span className="whitespace-nowrap text-muted">
-                                  {(candidate.confidence * 100).toFixed(0)}% match
-                                </span>
-                                <button
-                                  onClick={() => handleOpenDuplicate(candidate.document_id)}
-                                  className="text-xs text-brand-600 hover:text-brand-800"
-                                >
-                                  Open
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    void handleKeepOneFromGroup(
-                                      group,
-                                      candidate.document_id
-                                    )
-                                  }
-                                  className="text-xs text-emerald-700 hover:text-emerald-900"
-                                >
-                                  Keep This
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                          </Stack>
+                          <Stack spacing={1}>
+                            {group.documents.map((candidate) => (
+                              <Paper variant="outlined" key={candidate.document_id} sx={{ p: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Stack direction="row" spacing={1} sx={{ alignItems: "center", minWidth: 0, flex: 1 }}>
+                                  <Checkbox size="small" checked={selectedDuplicateIds.includes(candidate.document_id)} onChange={() => toggleDuplicateSelection(candidate.document_id)} />
+                                  <Typography variant="body2" noWrap>
+                                    {candidate.original_filename || candidate.document_id}
+                                  </Typography>
+                                </Stack>
+                                <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {(candidate.confidence * 100).toFixed(0)}% match
+                                  </Typography>
+                                  <Button size="small" onClick={() => handleOpenDuplicate(candidate.document_id)}>Open</Button>
+                                  <Button size="small" color="success" onClick={() => void handleKeepOneFromGroup(group, candidate.document_id)}>Keep This</Button>
+                                </Stack>
+                              </Paper>
+                            ))}
+                          </Stack>
+                        </Paper>
                       );
                     })}
-                  </div>
-                </div>
+                  </Stack>
+                </Paper>
               )}
 
               {showDuplicates && duplicateScan && duplicateScan.duplicate_groups.length === 0 && (
-                <div className="rounded-lg border surface-muted p-4 text-sm text-muted flex items-center justify-between">
-                  <span>No duplicate groups found.</span>
-                  <button
-                    onClick={() => setShowDuplicates(false)}
-                    className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                  >
-                    Dismiss
-                  </button>
-                </div>
+                <Paper variant="outlined" sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">No duplicate groups found.</Typography>
+                  <Button size="small" onClick={() => setShowDuplicates(false)}>Dismiss</Button>
+                </Paper>
               )}
 
-              {sectionEntries.map(([sectionName, sectionDocs]) => (
-                <div key={sectionName} className="space-y-3">
-                  <div
-                    className="sticky top-0 z-10 mb-2 group pt-2 pb-1 bg-[hsl(240,6%,10%)]"
-                    onDragOver={(e) => {
-                        e.preventDefault();
-                        e.currentTarget.classList.add("ring-2", "ring-[#8251EE]", "bg-[#8251EE]/10");
-                    }}
-                    onDragLeave={(e) => {
-                        e.currentTarget.classList.remove("ring-2", "ring-[#8251EE]", "bg-[#8251EE]/10");
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.currentTarget.classList.remove("ring-2", "ring-[#8251EE]", "bg-[#8251EE]/10");
-                      const droppedDocId = e.dataTransfer.getData("text/plain");
-                      if (droppedDocId) {
-                        void handleDropDocument(droppedDocId, sectionName, sectionDocs.length);
+              {sectionEntries.length > 0 && (
+                <Stack direction="row" spacing={2} sx={{ justifyContent: "flex-end", mb: 2 }}>
+                  <Button 
+                    size="small" 
+                    color="inherit"
+                    startIcon={allSectionsExpanded ? <UnfoldLessIcon /> : <UnfoldMoreIcon />}
+                    onClick={() => {
+                      if (allSectionsExpanded) {
+                        setExpandedSections({});
+                      } else {
+                        setExpandedSections(allSectionNames.reduce((acc, name) => ({ ...acc, [name]: true }), {}));
                       }
                     }}
                   >
-                    <div 
-                      className="relative overflow-hidden rounded-xl bg-gradient-to-r from-[#282C36] to-[#1E2129] backdrop-blur-md border border-white/10 shadow-lg transition-all duration-300 hover:border-white/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] cursor-pointer select-none"
-                      onClick={() => toggleSectionCollapsed(sectionName)}
-                    >
-                        <div className="absolute inset-0 bg-gradient-to-r from-[#8251EE]/0 via-[#8251EE]/10 to-[#8251EE]/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-                        
-                        <div className="flex items-center justify-between px-5 py-3.5 relative z-20">
-                            <div className="flex items-center gap-4">
-                                <motion.div
-                                    initial={false}
-                                    animate={{ rotate: collapsedSections[sectionName] ? 0 : 90 }}
-                                    transition={{ duration: 0.2, ease: "easeInOut" }}
-                                    className="flex items-center justify-center w-7 h-7 rounded-full bg-white/10 group-hover:bg-white/20 text-white/70 group-hover:text-white transition-colors"
-                                >
-                                    <ChevronRightIcon className="w-4 h-4 ml-0.5" />
-                                </motion.div>
-                                
-                                <div className="flex items-center gap-3">
-                                    <div className="p-1.5 rounded-lg bg-[#8251EE]/15 border border-[#8251EE]/30 shadow-inner">
-                                        <FolderIcon className="w-4 h-4 text-[#A888FA]" />
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <h4 className="text-[17px] font-semibold tracking-wide text-white group-hover:text-white transition-colors">
-                                            {sectionName}
-                                        </h4>
-                                        <p className="text-[13px] text-[#A1A1AA] group-hover:text-[#D4D4D8] transition-colors mt-[1px] font-medium max-w-lg truncate pr-4">
-                                            {getSectionDescription(sectionName)}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-4">
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        void handleRenameSection(sectionName);
-                                    }}
-                                    className="opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 border border-transparent hover:border-white/20 text-white/80 hover:text-white"
-                                    title="Rename Section"
-                                >
-                                    <PencilSquareIcon className="w-4 h-4" />
-                                </button>
-                                
-                                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#121419]/60 border border-white/10 shadow-inner">
-                                    <span className="text-sm font-bold text-[#A888FA]">
-                                        {sectionDocs.length}
-                                    </span>
-                                    <span className="text-[11px] font-semibold text-white/50 uppercase tracking-widest mt-0.5">
-                                        doc{sectionDocs.length === 1 ? "" : "s"}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                  </div>
+                    {allSectionsExpanded ? "Collapse All" : "Expand All"}
+                  </Button>
+                </Stack>
+              )}
 
-                  {!collapsedSections[sectionName] && (
-                    <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="space-y-4">
-                      {sectionDocs.map((doc, index) => (
-                    <motion.div
-                      key={doc.id}
-                      variants={staggerItem}
-                      draggable
-                      onDragStart={(e: any) => {
-                        e.dataTransfer.setData("text/plain", doc.id);
-                        setDraggingDocId(doc.id);
-                      }}
-                      onDragEnd={() => setDraggingDocId(null)}
-                      onDragOver={(e: any) => e.preventDefault()}
-                      onDrop={(e: any) => {
-                        e.preventDefault();
-                        const droppedDocId = e.dataTransfer.getData("text/plain");
-                        if (droppedDocId) {
-                          void handleDropDocument(droppedDocId, sectionName, index);
-                        }
-                      }}
-                      className={`relative group flex flex-col backdrop-blur-md bg-[#12141A]/40 border rounded-xl overflow-hidden shadow-[0_8px_20px_rgba(0,0,0,0.5)] transition-all duration-300 p-5 ${
-                        selectedDocId === doc.id ? "border-[#8251EE] bg-[#8251EE]/5 ring-1 ring-[#8251EE]/40" : "border-white/10 hover:border-[#8251EE]/50 hover:shadow-[0_10px_30px_rgba(130,81,238,0.15)]"
-                      } ${draggingDocId === doc.id ? "opacity-60" : ""}`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <label className="mt-1 flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={selectedDocumentIds.includes(doc.id)}
-                            onChange={() => toggleDocumentSelection(doc.id)}
-                          />
-                        </label>
-                        <button
-                          onClick={() =>
-                            setSelectedDocId(selectedDocId === doc.id ? null : doc.id)
-                          }
-                          className="flex-1 min-w-0 text-left"
-                        >
-                          <p className="text-lg font-bold text-[#9366F5] tracking-wide leading-snug group-hover:text-white transition-colors flex items-center gap-2">
-                            {doc.original_filename || doc.storage_uri}
-                          </p>
-                          {doc.summary && (
-                            <p className="mt-3 text-[15px] text-[#D4D4D8] line-clamp-3 leading-relaxed">
-                              {doc.summary}
-                            </p>
-                          )}
-                          <div className="mt-4 flex items-center gap-3 text-sm font-medium text-slate-400">
-                            <span className="text-slate-300 uppercase tracking-wider">{doc.file_type}</span>
-                            {doc.page_count && <span>{doc.page_count} page(s)</span>}
-                            {doc.is_vectorized && (
-                              <span className="bg-[#10B981]/20 text-[#10B981] px-2 py-1 rounded text-xs border border-[#10B981]/30">Indexed</span>
-                            )}
-                          </div>
-                          {doc.status === "failed" && doc.status_message && (
-                            <p className="mt-2 text-sm text-[#EF4444]">
-                              {doc.status_message}
-                            </p>
-                          )}
-                          <p className="mt-3 text-xs text-[#A1A1AA] font-medium tracking-wide">
-                            Uploaded {formatDateTime(doc.created_at)}
-                          </p>
-                        </button>
-                        <div className="flex flex-col items-end gap-2">
-                          <StatusBadge status={doc.status} />
-                          <div className="flex items-center gap-2">
-                            <select
-                              value={doc.section_label || "Ungrouped"}
-                              onChange={(e) =>
-                                void saveDocumentPlacement(
-                                  doc,
-                                  e.target.value === "Ungrouped" ? null : e.target.value,
-                                  doc.sort_order
-                                )
+              {sectionEntries.map(([sectionName, sectionDocs]) => (
+                <Box 
+                  key={sectionName} 
+                  sx={{ mb: 2 }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e: any) => {
+                    e.preventDefault();
+                    const droppedDocId = e.dataTransfer.getData("text/plain");
+                    if (droppedDocId) {
+                      void handleDropDocument(droppedDocId, sectionName, sectionDocs.length);
+                    }
+                  }}
+                >
+                  <Accordion 
+                    expanded={!!expandedSections[sectionName]} 
+                    onChange={() => toggleSectionExpanded(sectionName)}
+                    sx={{ bgcolor: 'action.hover', backgroundImage: 'none' }}
+                  >
+                    <AccordionSummary expandIcon={
+                      <ExpandMoreIcon />
+                    }>
+                      <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", width: "100%", pr: 2 }}>
+                        <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+                          <FolderIcon />
+                          <Box>
+                            <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>{sectionName}</Typography>
+                            <Typography variant="caption" color="text.secondary">{getSectionDescription(sectionName)}</Typography>
+                          </Box>
+                        </Stack>
+                        <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+                          <Button size="small" onClick={(e: any) => { e.stopPropagation(); void handleRenameSection(sectionName); }}>Rename</Button>
+                          <Chip size="small" label={`${sectionDocs.length} DOCS`} />
+                        </Stack>
+                      </Stack>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Stack spacing={2}>
+                        {sectionDocs.map((doc, index) => (
+                           <Paper
+                             key={doc.id}
+                             variant="outlined"
+                             draggable
+                             onDragStart={(e: any) => {
+                               // Don't start drag when user is clicking an interactive element
+                               const t = e.target as HTMLElement;
+                               if (t.closest('button, input, select, [role="button"], [role="combobox"], [role="option"], .MuiSelect-select')) {
+                                 e.preventDefault();
+                                 return;
+                               }
+                               e.dataTransfer.setData("text/plain", doc.id);
+                               setDraggingDocId(doc.id);
+                             }}
+                             onDragEnd={() => setDraggingDocId(null)}
+                            onDragOver={(e: any) => e.preventDefault()}
+                            onDrop={(e: any) => {
+                              e.preventDefault();
+                              const droppedDocId = e.dataTransfer.getData("text/plain");
+                              if (droppedDocId) {
+                                void handleDropDocument(droppedDocId, sectionName, index);
                               }
-                              className="rounded bg-black/40 border border-white/10 text-white px-2 py-1.5 text-[11px] uppercase tracking-wide focus:outline-none focus:border-[#8251EE]/50 font-medium w-full"
-                            >
-                              {Array.from(new Set(["Ungrouped", ...sectionEntries.map(([name]) => name)])).map((name) => (
-                                <option key={name} value={name}>
-                                  {name}
-                                </option>
-                              ))}
-                            </select>
-                            {index > 0 && (
-                              <button
-                                onClick={() =>
-                                  void saveDocumentPlacement(doc, doc.section_label, Math.max(0, doc.sort_order - 1))
-                                }
-                              className="text-xs uppercase tracking-widest font-bold text-white hover:text-[#8251EE] transition-colors"
+                            }}
+                            sx={{
+                              p: 2,
+                              opacity: draggingDocId === doc.id ? 0.5 : 1,
+                              borderColor: selectedDocId === doc.id ? 'primary.main' : 'divider',
+                              bgcolor: selectedDocId === doc.id ? 'action.selected' : 'background.paper',
+                              '&:hover': { borderColor: 'primary.light' },
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            <Stack direction="row" spacing={2} sx={{ alignItems: "flex-start" }}>
+                              <Checkbox 
+                                size="small" 
+                                checked={selectedDocumentIds.includes(doc.id)} 
+                                onChange={() => toggleDocumentSelection(doc.id)} 
+                              />
+                              <Box sx={{ cursor: 'pointer', flexGrow: 1 }} onClick={() => setSelectedDocId(selectedDocId === doc.id ? null : doc.id)}>
+                                <Typography variant="subtitle1" color="primary" sx={{ fontWeight: "bold" }}>
+                                  {doc.display_title || doc.original_filename || doc.storage_uri}
+                                </Typography>
+                                {doc.display_title && doc.original_filename && (
+                                  <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.25, fontStyle: 'italic' }}>
+                                    {doc.original_filename}
+                                  </Typography>
+                                )}
+                                {doc.summary && (
+                                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                    {doc.summary}
+                                  </Typography>
+                                )}
+                                <Stack direction="row" spacing={2} sx={{ alignItems: "center", mt: 2 }}>
+                                  <Typography variant="caption" color="text.disabled" sx={{ textTransform: "uppercase" }}>{doc.file_type}</Typography>
+                                  {doc.page_count && <Typography variant="caption" color="text.disabled">{doc.page_count} page(s)</Typography>}
+                                  {doc.is_vectorized && <Chip size="small" color="success" variant="outlined" label="Indexed" sx={{ height: 20, fontSize: '0.65rem' }} />}
+                                </Stack>
+                                {doc.status === "failed" && doc.status_message && (
+                                  <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>{doc.status_message}</Typography>
+                                )}
+                                <Typography variant="caption" color="text.disabled" sx={{ mt: 1, display: 'block' }}>
+                                  Uploaded {formatDateTime(doc.created_at)}
+                                </Typography>
+                              </Box>
+                              <Stack
+                                spacing={1}
+                                sx={{ alignItems: "flex-end" }}
+                                onMouseDown={(e) => e.stopPropagation()}
                               >
-                                Up
-                              </button>
-                            )}
-                            {index < sectionDocs.length - 1 && (
-                              <button
-                                onClick={() =>
-                                  void saveDocumentPlacement(doc, doc.section_label, doc.sort_order + 1)
-                                }
-                              className="text-xs uppercase tracking-widest font-bold text-white hover:text-[#8251EE] transition-colors"
-                              >
-                                Down
-                              </button>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {(doc.status === "failed" || doc.status === "pending") && (
-                              <button
-                                onClick={() => handleRetryDocument(doc.id)}
-                                disabled={retryMutation.isPending}
-                                className="text-xs uppercase tracking-widest font-bold text-[#8251EE] hover:text-[#9366F5] transition-colors"
-                              >
-                                Retry
-                              </button>
-                            )}
-                            {doc.status === "completed" && (
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    await resummarizeDocMutation.mutateAsync(doc.id);
-                                    toast.success("Summary updated.");
-                                  } catch (err: any) {
-                                    toast.error(err?.response?.data?.detail || "Failed to re-summarize.");
-                                  }
-                                }}
-                                disabled={resummarizeDocMutation.isPending}
-                                className="text-xs uppercase tracking-widest font-bold text-white hover:text-[#8251EE] transition-colors"
-                              >
-                                Re-summarize
-                              </button>
-                            )}
-                            <button
-                              onClick={() =>
-                                handleDeleteDocument(
-                                  doc.id,
-                                  doc.original_filename || doc.storage_uri
-                                )
-                              }
-                              disabled={deleteMutation.isPending}
-                              className="text-xs uppercase tracking-widest font-bold text-[#EF4444] hover:text-[#F87171] transition-colors"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                    </motion.div>
-                  )}
-                </div>
+                                 <StatusBadge status={doc.status} />
+                                 <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                                   <TextField
+                                     select
+                                     size="small"
+                                     value={doc.section_label || "Ungrouped"}
+                                     onChange={(e) => {
+                                       void saveDocumentPlacement(doc, e.target.value === "Ungrouped" ? null : e.target.value, doc.sort_order);
+                                     }}
+                                    sx={{ minWidth: 120, '& .MuiInputBase-input': { py: 0.5, px: 1, fontSize: '0.75rem' } }}
+                                  >
+                                    {Array.from(new Set(["Ungrouped", ...STANDARD_SECTIONS, ...sectionEntries.map(([name]) => name)])).map((name) => (
+                                      <MenuItem key={name} value={name} sx={{ fontSize: '0.75rem' }}>{name}</MenuItem>
+                                    ))}
+                                  </TextField>
+                                  <Stack>
+                                    {index > 0 && <Button size="small" sx={{ minWidth: 30, p: 0, fontSize: '0.6rem' }} onClick={() => void saveDocumentPlacement(doc, doc.section_label, Math.max(0, doc.sort_order - 1))}>Up</Button>}
+                                    {index < sectionDocs.length - 1 && <Button size="small" sx={{ minWidth: 30, p: 0, fontSize: '0.6rem' }} onClick={() => void saveDocumentPlacement(doc, doc.section_label, doc.sort_order + 1)}>Dn</Button>}
+                                  </Stack>
+                                </Stack>
+                                <Stack direction="row" spacing={1}>
+                                  {(doc.status === "failed" || doc.status === "pending") && (
+                                    <Button size="small" color="primary" onClick={() => handleRetryDocument(doc.id)} disabled={retryMutation.isPending} sx={{ fontSize: '0.7rem' }}>Retry</Button>
+                                  )}
+                                  {doc.status === "completed" && (
+                                    <Button size="small" color="inherit" onClick={async () => {
+                                      try { await resummarizeDocMutation.mutateAsync(doc.id); toast.success("Summary updated."); } 
+                                      catch (err: any) { toast.error(err?.response?.data?.detail || "Failed to re-summarize."); }
+                                    }} disabled={resummarizeDocMutation.isPending} sx={{ fontSize: '0.7rem' }}>Re-summarize</Button>
+                                  )}
+                                  <Button size="small" color="error" onClick={() => handleDeleteDocument(doc.id, doc.original_filename || doc.storage_uri)} disabled={deleteMutation.isPending} sx={{ fontSize: '0.7rem' }}>Delete</Button>
+                                </Stack>
+                              </Stack>
+                            </Stack>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    </AccordionDetails>
+                  </Accordion>
+                </Box>
               ))}
-            </div>
+            </Stack>
           )}
-        </div>
-      </div>
+        </Box>
+      </Box>
 
       {/* Document Preview Panel */}
       {selectedDoc && (
-        <div className="w-1/2 overflow-auto evidence-panel-enter bg-slate-50 dark:bg-slate-900">
-          <div className="px-6 py-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-heading">
-                {compareDoc ? "Document Comparison" : "Document Preview"}
-              </h3>
-              <button
-                onClick={() => {
-                  setSelectedDocId(null);
-                  setCompareDocId(null);
-                }}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              >
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-            {compareDoc ? (
-              <div className="grid grid-cols-2 gap-4">
-                {renderDocumentPreview(selectedDoc, "Primary")}
-                {renderDocumentPreview(compareDoc, "Comparison")}
-              </div>
-            ) : (
-              renderDocumentPreview(selectedDoc, "Primary")
-            )}
-          </div>
-        </div>
+        <Box sx={{ width: "50%", flexShrink: 0, overflowY: "auto", bgcolor: "background.default", p: 4, borderLeft: 1, borderColor: "divider" }}>
+          <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+              {compareDoc ? "Document Comparison" : "Document Preview"}
+            </Typography>
+            <IconButton onClick={() => { setSelectedDocId(null); setCompareDocId(null); }}>
+              <CloseIcon />
+            </IconButton>
+          </Stack>
+          {compareDoc ? (
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>{renderDocumentPreview(selectedDoc, "Primary")}</Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>{renderDocumentPreview(compareDoc, "Comparison")}</Box>
+            </Box>
+          ) : (
+            renderDocumentPreview(selectedDoc, "Primary")
+          )}
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }

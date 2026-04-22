@@ -23,6 +23,10 @@ import type {
   TimelineEventResponse,
   TimelineEventDetail,
   SemanticSearchResult,
+  ChatSessionListItem,
+  ChatSessionDetail,
+  ChatSessionUpdateRequest,
+  ChatSessionExportResponse,
 } from "@/types";
 
 // ── Cases ───────────────────────────────────────────────
@@ -343,5 +347,108 @@ export function useSemanticSearch() {
   return useMutation({
     mutationFn: (data: { query: string; case_id: string; top_k?: number }) =>
       apiClient.post<SemanticSearchResult[]>("/api/search", data),
+  });
+}
+
+// ── Google Integration ──────────────────────────────────
+export function useGoogleStatus() {
+  return useQuery<{ connected: boolean }>({
+    queryKey: ["google", "status"],
+    queryFn: () => apiClient.get<{ connected: boolean }>("/api/integrations/google/status"),
+  });
+}
+
+export function useGoogleConnect() {
+  return useMutation({
+    mutationFn: () => apiClient.get<{ url: string }>("/api/integrations/google/connect"),
+  });
+}
+
+export function useBackupToDrive(caseId: string) {
+  return useMutation({
+    mutationFn: () => apiClient.post<{ message: string; document_count: number }>(`/api/cases/${caseId}/documents/backup-to-drive`),
+  });
+}
+
+// ── Chat Sessions ────────────────────────────────────────
+export function useChatSessions(caseId: string) {
+  return useQuery<ChatSessionListItem[]>({
+    queryKey: ["cases", caseId, "chat-sessions"],
+    queryFn: () =>
+      apiClient.get<ChatSessionListItem[]>(`/api/cases/${caseId}/chat-sessions`),
+    enabled: !!caseId,
+  });
+}
+
+export function useSearchChatSessions(caseId: string, query: string) {
+  return useQuery<ChatSessionListItem[]>({
+    queryKey: ["cases", caseId, "chat-sessions", "search", query],
+    queryFn: () =>
+      apiClient.get<ChatSessionListItem[]>(
+        `/api/cases/${caseId}/chat-sessions/search`,
+        { q: query }
+      ),
+    enabled: !!caseId && query.trim().length > 0,
+  });
+}
+
+export function useChatSessionDetail(caseId: string, sessionId: string | null) {
+  return useQuery<ChatSessionDetail>({
+    queryKey: ["cases", caseId, "chat-sessions", sessionId],
+    queryFn: () =>
+      apiClient.get<ChatSessionDetail>(
+        `/api/cases/${caseId}/chat-sessions/${sessionId}`
+      ),
+    enabled: !!caseId && !!sessionId,
+  });
+}
+
+export function useCreateChatSession(caseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post<ChatSessionListItem>(`/api/cases/${caseId}/chat-sessions`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cases", caseId, "chat-sessions"] });
+    },
+  });
+}
+
+export function useUpdateChatSession(caseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sessionId, data }: { sessionId: string; data: ChatSessionUpdateRequest }) =>
+      apiClient.patch<ChatSessionListItem>(
+        `/api/cases/${caseId}/chat-sessions/${sessionId}`,
+        data
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cases", caseId, "chat-sessions"] });
+    },
+  });
+}
+
+export function useDeleteChatSession(caseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: string) =>
+      apiClient.delete<void>(`/api/cases/${caseId}/chat-sessions/${sessionId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cases", caseId, "chat-sessions"] });
+    },
+  });
+}
+
+export function useExportChatToDocument(caseId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: string) =>
+      apiClient.post<ChatSessionExportResponse>(
+        `/api/cases/${caseId}/chat-sessions/${sessionId}/export`
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cases", caseId, "documents"] });
+      queryClient.invalidateQueries({ queryKey: ["cases", caseId] });
+    },
   });
 }

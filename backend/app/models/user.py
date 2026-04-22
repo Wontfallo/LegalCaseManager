@@ -21,6 +21,7 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    google_tokens: Mapped[str | None] = mapped_column(String(4000), nullable=True)
 
     # Relationships
     case_permissions: Mapped[list["CaseUserLink"]] = relationship(

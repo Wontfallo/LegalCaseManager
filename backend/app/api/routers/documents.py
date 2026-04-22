@@ -43,6 +43,7 @@ from app.services.document_organization import (
     infer_section_label,
     organize_documents_with_ai,
 )
+
 logger = get_logger("documents_router")
 router = APIRouter(prefix="/api", tags=["Documents"])
 
@@ -93,7 +94,11 @@ def _text_containment_ratio(left: str, right: str) -> float:
     right_tokens = set(_normalize_text_for_fingerprint(right).split())
     if not left_tokens or not right_tokens:
         return 0.0
-    smaller, larger = (left_tokens, right_tokens) if len(left_tokens) <= len(right_tokens) else (right_tokens, left_tokens)
+    smaller, larger = (
+        (left_tokens, right_tokens)
+        if len(left_tokens) <= len(right_tokens)
+        else (right_tokens, left_tokens)
+    )
     if len(smaller) < 20:
         return 0.0
     overlap = smaller & larger
@@ -806,9 +811,13 @@ async def resummarize_document(
         file_type=doc.file_type,
     )
 
+    # Refresh to pick up the display_title that was set during summarization
+    await db.refresh(doc)
+
     return {
         "document_id": str(doc.id),
         "summary": summary,
+        "display_title": doc.display_title,
         "status": "updated" if summary else "no_summary",
     }
 
@@ -839,8 +848,17 @@ async def resummarize_all_documents(
             detail="No completed documents found to re-summarize.",
         )
 
+    for doc in docs:
+        doc.status = DocStatus.PROCESSING.value
+        doc.status_message = "Queued for AI summarization."
+    await db.commit()
+
     async def _run_all() -> None:
         from app.services.extraction_service import summarize_document as _summarize
+        from app.services.document_organization import _sort_within_sections
+        from app.schemas.documents import DocumentSectionSuggestion as _DSS
+        from app.core.database import async_session_factory
+        from sqlalchemy import select
 
         for doc in docs:
             try:
@@ -849,7 +867,9 @@ async def resummarize_all_documents(
                 await _summarize(
                     text_payload=doc.raw_ocr_text or "",
                     document_id=doc.id,
-                    image_path=str(full_path) if is_image and full_path.exists() else None,
+                    image_path=str(full_path)
+                    if is_image and full_path.exists()
+                    else None,
                     file_type=doc.file_type,
                 )
             except Exception as exc:
@@ -858,11 +878,101 @@ async def resummarize_all_documents(
                     document_id=str(doc.id),
                     error=str(exc),
                 )
+            finally:
+                async with async_session_factory() as session:
+                    res = await session.execute(
+                        select(Document).where(Document.id == doc.id)
+                    )
+                    d = res.scalar_one_or_none()
+                    if d:
+                        d.status = DocStatus.COMPLETED.value
+                        d.status_message = "Summary updated."
+                        await session.commit()
+
+        # Re-sort all docs chronologically within their sections now that
+        # summaries contain reliable dates for _extract_document_date to use.
+        try:
+            async with async_session_factory() as resort_session:
+                resort_result = await resort_session.execute(
+                    select(Document).where(Document.case_id == case_id)
+                )
+                all_docs = list(resort_result.scalars().all())
+                if all_docs:
+                    doc_by_id = {str(d.id): d for d in all_docs}
+                    suggestions = [
+                        _DSS(
+                            document_id=d.id,
+                            section_label=d.section_label or "General",
+                            sort_order=d.sort_order,
+                            reason="post-resummarize date re-sort",
+                        )
+                        for d in all_docs
+                    ]
+                    _sort_within_sections(suggestions, doc_by_id)
+                    await resort_session.flush()
+                    await resort_session.commit()
+                    logger.info(
+                        "post_resummarize_resort_done",
+                        case_id=str(case_id),
+                        doc_count=len(all_docs),
+                    )
+        except Exception as exc:
+            logger.warning(
+                "post_resummarize_resort_failed", case_id=str(case_id), error=str(exc)
+            )
 
     background_tasks.add_task(_run_all)
 
     return {
         "message": f"Re-summarization queued for {len(docs)} document(s).",
+        "document_count": len(docs),
+    }
+
+
+@router.post(
+    "/cases/{case_id}/documents/backup-to-drive",
+    status_code=status.HTTP_200_OK,
+)
+async def backup_documents_to_drive(
+    case_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: DBSession,
+    user: CurrentUser,
+) -> dict:
+    """Queue all documents in a case for backup to Google Drive."""
+    from app.services.google_service import google_service
+
+    await require_case_access(case_id, user, db)
+
+    # Check if Google is connected
+    creds = await google_service.get_credentials(user.id)
+    if not creds:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google account not connected. Please connect via Integrations settings.",
+        )
+
+    result = await db.execute(select(Document).where(Document.case_id == case_id))
+    docs = result.scalars().all()
+
+    if not docs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No documents found to backup.",
+        )
+
+    async def _run_backup():
+        for doc in docs:
+            full_path = settings.upload_path / Path(doc.storage_uri)
+            if full_path.exists():
+                await google_service.backup_document(
+                    user.id, str(full_path), doc.original_filename
+                )
+
+    background_tasks.add_task(_run_backup)
+
+    return {
+        "message": f"Backup to Google Drive started for {len(docs)} document(s).",
         "document_count": len(docs),
     }
 
@@ -880,9 +990,7 @@ async def reocr_all_documents(
     """Queue full OCR reprocessing for all documents in a case (OCR + summarize + timeline)."""
     await require_case_access(case_id, user, db)
 
-    result = await db.execute(
-        select(Document).where(Document.case_id == case_id)
-    )
+    result = await db.execute(select(Document).where(Document.case_id == case_id))
     docs = result.scalars().all()
     if not docs:
         raise HTTPException(
@@ -956,8 +1064,15 @@ async def scan_images_with_vision(
             detail="No image documents found in this case.",
         )
 
+    for doc in docs:
+        doc.status = DocStatus.PROCESSING.value
+        doc.status_message = "Queued for Vision scan."
+    await db.commit()
+
     async def _run_vision_scan() -> None:
         from app.services.extraction_service import summarize_document as _summarize
+        from app.core.database import async_session_factory
+        from sqlalchemy import select
 
         for doc in docs:
             try:
@@ -976,6 +1091,16 @@ async def scan_images_with_vision(
                     document_id=str(doc.id),
                     error=str(exc),
                 )
+            finally:
+                async with async_session_factory() as session:
+                    res = await session.execute(
+                        select(Document).where(Document.id == doc.id)
+                    )
+                    d = res.scalar_one_or_none()
+                    if d:
+                        d.status = DocStatus.COMPLETED.value
+                        d.status_message = "Vision scan completed."
+                        await session.commit()
 
     background_tasks.add_task(_run_vision_scan)
 

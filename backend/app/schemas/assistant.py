@@ -17,9 +17,16 @@ class AssistantToolCall(BaseModel):
 
 
 class AssistantChatRequest(BaseModel):
-    messages: list[AssistantMessage] = Field(..., min_length=1, max_length=30)
+    """Session-aware chat request. Sends a single new message."""
+
+    session_id: str | None = None
+    message: str = Field(..., min_length=1, max_length=12000)
 
 
 class AssistantChatResponse(BaseModel):
+    """Chat response including session metadata."""
+
     message: AssistantMessage
     tool_calls: list[AssistantToolCall] = Field(default_factory=list)
+    session_id: str
+    session_title: str | None = None

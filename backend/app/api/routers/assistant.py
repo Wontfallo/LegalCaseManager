@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections import Counter
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
@@ -11,6 +12,7 @@ from sqlalchemy import func, select
 from app.core.deps import CurrentUser, DBSession, require_case_access
 from app.core.logging import get_logger
 from app.models.case import Case
+from app.models.chat_session import ChatMessage, ChatSession
 from app.models.communication import Communication
 from app.models.document import Document
 from app.models.timeline_event import TimelineEvent
@@ -20,7 +22,6 @@ from app.schemas.assistant import (
     AssistantMessage,
     AssistantToolCall,
 )
-from app.schemas.documents import DuplicateCandidate, DuplicateGroup
 from app.services.document_organization import (
     infer_section_label,
     organize_documents_with_ai,
@@ -40,12 +41,17 @@ def _preview(text: str | None, limit: int = 220) -> str:
     return cleaned[:limit]
 
 
-def _compact_documents(documents: list[Document], limit: int = 80) -> list[dict[str, Any]]:
+def _compact_documents(
+    documents: list[Document], limit: int = 80
+) -> list[dict[str, Any]]:
     return [
         {
             "id": str(doc.id),
             "filename": doc.original_filename,
-            "section": doc.section_label or infer_section_label(doc.original_filename, doc.summary, doc.raw_ocr_text),
+            "section": doc.section_label
+            or infer_section_label(
+                doc.original_filename, doc.summary, doc.raw_ocr_text
+            ),
             "status": doc.status,
             "summary": _preview(doc.summary, 160),
         }
@@ -59,7 +65,7 @@ async def _load_case_context(case_id: uuid.UUID, db: DBSession) -> dict[str, Any
     if case_obj is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Case not found.")
 
-    docs = (
+    docs = list(
         (
             await db.execute(
                 select(Document)
@@ -73,12 +79,16 @@ async def _load_case_context(case_id: uuid.UUID, db: DBSession) -> dict[str, Any
 
     comm_count = (
         await db.execute(
-            select(func.count()).select_from(Communication).where(Communication.case_id == case_id)
+            select(func.count())
+            .select_from(Communication)
+            .where(Communication.case_id == case_id)
         )
     ).scalar_one()
     timeline_count = (
         await db.execute(
-            select(func.count()).select_from(TimelineEvent).where(TimelineEvent.case_id == case_id)
+            select(func.count())
+            .select_from(TimelineEvent)
+            .where(TimelineEvent.case_id == case_id)
         )
     ).scalar_one()
 
@@ -101,9 +111,11 @@ async def _load_case_context(case_id: uuid.UUID, db: DBSession) -> dict[str, Any
     }
 
 
-def _tool_list_documents(documents: list[Document], arguments: dict[str, Any]) -> dict[str, Any]:
+def _tool_list_documents(
+    documents: list[Document], arguments: dict[str, Any]
+) -> dict[str, Any]:
     section = str(arguments.get("section") or "").strip().lower()
-    status = str(arguments.get("status") or "").strip().lower()
+    status_filter = str(arguments.get("status") or "").strip().lower()
     filename_contains = str(arguments.get("filename_contains") or "").strip().lower()
     limit = min(max(int(arguments.get("limit", 30)), 1), 100)
 
@@ -111,9 +123,12 @@ def _tool_list_documents(documents: list[Document], arguments: dict[str, Any]) -
     for doc in documents:
         if section and (doc.section_label or "").lower() != section:
             continue
-        if status and (doc.status or "").lower() != status:
+        if status_filter and (doc.status or "").lower() != status_filter:
             continue
-        if filename_contains and filename_contains not in (doc.original_filename or "").lower():
+        if (
+            filename_contains
+            and filename_contains not in (doc.original_filename or "").lower()
+        ):
             continue
         filtered.append(doc)
 
@@ -133,7 +148,9 @@ def _tool_list_documents(documents: list[Document], arguments: dict[str, Any]) -
     }
 
 
-def _tool_get_document_details(documents: list[Document], arguments: dict[str, Any]) -> dict[str, Any]:
+def _tool_get_document_details(
+    documents: list[Document], arguments: dict[str, Any]
+) -> dict[str, Any]:
     requested_id = str(arguments.get("document_id") or "").strip()
     filename_contains = str(arguments.get("filename_contains") or "").strip().lower()
 
@@ -142,7 +159,10 @@ def _tool_get_document_details(documents: list[Document], arguments: dict[str, A
         if requested_id and str(doc.id) == requested_id:
             matches = [doc]
             break
-        if filename_contains and filename_contains in (doc.original_filename or "").lower():
+        if (
+            filename_contains
+            and filename_contains in (doc.original_filename or "").lower()
+        ):
             matches.append(doc)
 
     if not matches:
@@ -163,7 +183,9 @@ def _tool_get_document_details(documents: list[Document], arguments: dict[str, A
     }
 
 
-async def _tool_semantic_search(case_id: uuid.UUID, arguments: dict[str, Any]) -> dict[str, Any]:
+async def _tool_semantic_search(
+    case_id: uuid.UUID, arguments: dict[str, Any]
+) -> dict[str, Any]:
     query = str(arguments.get("query") or "").strip()
     if not query:
         return {"results": [], "message": "No search query provided."}
@@ -172,7 +194,9 @@ async def _tool_semantic_search(case_id: uuid.UUID, arguments: dict[str, Any]) -
     return {"results": results}
 
 
-async def _tool_organize_documents(case_id: uuid.UUID, documents: list[Document], db: DBSession) -> dict[str, Any]:
+async def _tool_organize_documents(
+    case_id: uuid.UUID, documents: list[Document], db: DBSession
+) -> dict[str, Any]:
     suggestions = await organize_documents_with_ai(case_id=case_id, documents=documents)
     await db.flush()
     return {
@@ -225,21 +249,28 @@ async def _run_tool(
         return result, f"Found {len(result.get('matches', []))} matching documents."
     if tool_name == "semantic_search":
         result = await _tool_semantic_search(case_id, arguments)
-        return result, f"Found {len(result.get('results', []))} semantic search results."
+        return (
+            result,
+            f"Found {len(result.get('results', []))} semantic search results.",
+        )
     if tool_name == "organize_documents":
         result = await _tool_organize_documents(case_id, documents, db)
         return result, f"Reorganized {result['updated_count']} documents."
     if tool_name == "scan_duplicates":
         result = {"duplicate_groups": _find_duplicate_groups(documents)}
         return result, f"Found {len(result['duplicate_groups'])} duplicate groups."
-    return {"error": f"Unknown tool: {tool_name}"}, f"Tool {tool_name} is not available."
+    return {
+        "error": f"Unknown tool: {tool_name}"
+    }, f"Tool {tool_name} is not available."
 
 
 async def _plan_tool_calls(
     case_summary: dict[str, Any],
     messages: list[AssistantMessage],
 ) -> list[dict[str, Any]]:
-    latest_user_message = next((m.content for m in reversed(messages) if m.role == "user"), "")
+    latest_user_message = next(
+        (m.content for m in reversed(messages) if m.role == "user"), ""
+    )
 
     if get_active_chat_provider() is None:
         lowered = latest_user_message.lower()
@@ -248,7 +279,12 @@ async def _plan_tool_calls(
         if "duplicate" in lowered:
             return [{"tool_name": "scan_duplicates", "arguments": {}}]
         if "search" in lowered or "find" in lowered or "mention" in lowered:
-            return [{"tool_name": "semantic_search", "arguments": {"query": latest_user_message, "top_k": 6}}]
+            return [
+                {
+                    "tool_name": "semantic_search",
+                    "arguments": {"query": latest_user_message, "top_k": 6},
+                }
+            ]
         return [{"tool_name": "list_documents", "arguments": {"limit": 20}}]
 
     planner_prompt = (
@@ -298,7 +334,9 @@ async def _final_answer(
     messages: list[AssistantMessage],
     tool_outputs: list[dict[str, Any]],
 ) -> str:
-    latest_user_message = next((m.content for m in reversed(messages) if m.role == "user"), "")
+    latest_user_message = next(
+        (m.content for m in reversed(messages) if m.role == "user"), ""
+    )
     if get_active_chat_provider() is None:
         if tool_outputs:
             return json.dumps(tool_outputs[0], indent=2)
@@ -325,6 +363,34 @@ async def _final_answer(
     return response.strip()
 
 
+async def _generate_session_title(messages: list[AssistantMessage]) -> str | None:
+    """Generate a short smart title from the first couple of exchanges."""
+    if get_active_chat_provider() is None:
+        return None
+    # Take first user + first assistant message for context
+    excerpt = []
+    for m in messages[:4]:
+        excerpt.append(f"{m.role.capitalize()}: {m.content[:300]}")
+    try:
+        raw = await chat_completion(
+            system_prompt=(
+                "Generate a concise chat title (max 60 characters) that captures the main topic "
+                "of this conversation. Return ONLY the title text, no quotes, no punctuation at end."
+            ),
+            user_prompt="\n".join(excerpt),
+            temperature=0.3,
+            max_tokens=40,
+        )
+        title = raw.strip().strip('"').strip("'")[:60]
+        return title if title else None
+    except Exception as exc:
+        logger.warning("title_generation_failed", error=str(exc))
+        return None
+
+
+# ── Chat Endpoint ────────────────────────────────────────
+
+
 @router.post("/chat", response_model=AssistantChatResponse)
 async def chat_with_case_assistant(
     case_id: uuid.UUID,
@@ -334,19 +400,60 @@ async def chat_with_case_assistant(
 ) -> AssistantChatResponse:
     await require_case_access(case_id, user, db)
 
+    # ── 1. Resolve or create session ────────────────────
+    session: ChatSession | None = None
+
+    if body.session_id:
+        try:
+            sid = uuid.UUID(body.session_id)
+        except ValueError:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, detail="Invalid session_id."
+            )
+
+        result = await db.execute(
+            select(ChatSession).where(
+                ChatSession.id == sid,
+                ChatSession.case_id == case_id,
+            )
+        )
+        session = result.scalar_one_or_none()
+        if session is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, detail="Chat session not found."
+            )
+        await db.refresh(session, ["messages"])
+    else:
+        session = ChatSession(case_id=case_id)
+        db.add(session)
+        await db.flush()  # gives us session.id
+
+    # ── 2. Build in-memory message history ──────────────
+    history: list[AssistantMessage] = [
+        AssistantMessage.model_validate({"role": m.role, "content": m.content})
+        for m in (session.messages or [])
+    ]
+    # Append the new user message
+    history.append(AssistantMessage(role="user", content=body.message))
+
+    # ── 3. Run the assistant ─────────────────────────────
     context = await _load_case_context(case_id, db)
     documents = context["documents"]
     case_summary = context["summary"]
 
-    tool_plans = await _plan_tool_calls(case_summary, body.messages)
+    tool_plans = await _plan_tool_calls(case_summary, history)
     tool_calls: list[AssistantToolCall] = []
     tool_outputs: list[dict[str, Any]] = []
 
     for planned in tool_plans:
         tool_name = planned["tool_name"]
         arguments = planned.get("arguments") or {}
-        result, summary = await _run_tool(tool_name, arguments, case_id, documents, db)
-        tool_outputs.append({"tool_name": tool_name, "arguments": arguments, "result": result})
+        result_data, summary = await _run_tool(
+            tool_name, arguments, case_id, documents, db
+        )
+        tool_outputs.append(
+            {"tool_name": tool_name, "arguments": arguments, "result": result_data}
+        )
         tool_calls.append(
             AssistantToolCall(
                 tool_name=tool_name,
@@ -359,11 +466,32 @@ async def chat_with_case_assistant(
         await db.commit()
         context = await _load_case_context(case_id, db)
         case_summary = context["summary"]
-    else:
-        await db.rollback()
 
-    answer = await _final_answer(case_summary, body.messages, tool_outputs)
+    answer = await _final_answer(case_summary, history, tool_outputs)
+
+    # ── 4. Persist user message + assistant response ────
+    now = datetime.now(timezone.utc)
+    db.add(ChatMessage(session_id=session.id, role="user", content=body.message))
+    db.add(ChatMessage(session_id=session.id, role="assistant", content=answer))
+    session.updated_at = now
+
+    # ── 5. Auto-generate title after 1st exchange ───────
+    history.append(AssistantMessage(role="assistant", content=answer))
+    user_msg_count = sum(1 for m in history if m.role == "user")
+    if user_msg_count == 1 and session.title is None:
+        session.title = await _generate_session_title(history)
+
+    await db.commit()
+
+    logger.info(
+        "assistant_chat_completed",
+        session_id=str(session.id),
+        tool_count=len(tool_calls),
+    )
+
     return AssistantChatResponse(
         message=AssistantMessage(role="assistant", content=answer),
         tool_calls=tool_calls,
+        session_id=str(session.id),
+        session_title=session.title,
     )

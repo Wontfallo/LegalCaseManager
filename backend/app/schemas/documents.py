@@ -29,6 +29,7 @@ class DocumentResponse(BaseModel):
     page_count: int | None
     is_vectorized: bool
     summary: str | None = None
+    display_title: str | None = None
     text_fingerprint: str | None = None
     created_at: datetime
 

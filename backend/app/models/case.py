@@ -67,6 +67,9 @@ class Case(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     user_links: Mapped[list["CaseUserLink"]] = relationship(
         "CaseUserLink", back_populates="case", cascade="all, delete-orphan"
     )
+    chat_sessions: Mapped[list["ChatSession"]] = relationship(
+        "ChatSession", back_populates="case", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Case id={self.id} title={self.title!r}>"
